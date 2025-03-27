@@ -6,8 +6,6 @@ from os import urandom
 import bcrypt
 from funcs import *
 
-
-
 app = Flask(__name__)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:Roberto1!@localhost/my_flask_db'
