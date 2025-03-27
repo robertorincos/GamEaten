@@ -8,7 +8,7 @@ from funcs import *
 
 app = Flask(__name__)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:Roberto1!@localhost/my_flask_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -25,13 +25,6 @@ class User(db.Model):
 def index():
     return {'status':'pass'}
 
-@app.route('/search', methods=['POST'])
-def search():
-    name = request.json['query']
-    headers = {'Client-ID': 'l5p5jkv0j41qlrng397tkpqjmve2fl', 'Authorization':'Bearer gl3lnko3yhqirxu4500s5u1oounqdi'}
-    body =f'fields *; search "{name}";'
-    x = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
-    return jsonify(x.json())
 
 @app.route('/search', methods=['POST'])
 def search():
