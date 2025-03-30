@@ -1,5 +1,16 @@
 import bcrypt
 import json
+import requests
+from flask import Flask, jsonify, request
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+from datetime import datetime, timedelta
+from functools import wraps
+import jwt
+import app
+
+load_dotenv()
 
 def hash_password(plain_password: str) -> bytes:
     """
@@ -36,3 +47,29 @@ def save_json(file_path: str, data) -> None:
     """
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
+
+def check_token():
+    client = os.getenv("IGDB_CLIENT")
+    secret = os.getenv("CLIENT_SECRET")
+    params = {'client_id':f'{client}', 'client_secret':f'{secret}', 'grant_type':'client_credentials'}
+    x = requests.post(f'https://id.twitch.tv/oauth2/token', params=params)
+    return x
+
+def token_required(func):
+    # decorator factory which invoks update_wrapper() method and passes decorated function as an argument
+    @wraps(func)
+    def decorated(*args, **kwargs):
+        token = request.args.get('token')
+        if not token:
+            return jsonify({'Alert!': 'Token is missing!'}), 401
+
+        try:
+
+            data = jwt.decode(token, app.config['SECRET_KEY'])
+        # You can use the JWT errors in exception
+        # except jwt.InvalidTokenError:
+        #     return 'Invalid token. Please log in again.'
+        except:
+            return jsonify({'Message': 'Invalid token'}), 403
+        return func(*args, **kwargs)
+    return decorated
