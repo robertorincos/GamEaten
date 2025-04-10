@@ -35,16 +35,10 @@ def token_required(func):
             auth_header = request.headers['Authorization']
             if auth_header.startswith('Bearer '):
                 token = auth_header.split(' ')[1]
-        
-        if not token and request.is_json and 'token' in request.json:
-            token = request.json['token']
-            
         if not token:
             return jsonify({'Alert!': 'Token is missing!'}), 401
-
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-                
         except jwt.ExpiredSignatureError:
             return jsonify({'Message': 'Token has expired'}), 401
         except jwt.InvalidTokenError:
@@ -81,7 +75,17 @@ def search():
     headers = {'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 'Authorization':f'Bearer {token}'}
     body =f'fields *; search "{name}";'
     x = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
-    return jsonify(x.json())
+    return jsonify(x.json()), 200
+
+# rota que com base no id do jogo (no igdb) retorna TODOS os dados do jogo
+# necessário:
+# nome do jogo
+# descrição do jogo
+# poster do jogo
+# imagens cover (links)
+# avaliacoes de criticos e jogadores (links)
+# data de lançamento
+# plataformas
 
 
 @app.route('/register', methods=['POST'])
@@ -97,23 +101,7 @@ def register():
     db.session.add(new_user)
     db.session.commit()
     info.pop('pass')
-    return info
-
-#login
-# @app.route('/login', methods=['POST'])
-# def login():
-#     password = request.json['pass']
-#     email = request.json['email']
-#     user = User.query.filter_by(email=email).first()
-#     if user:
-#         passworddb = user.password.encode('utf-8')
-#         if verify_password(password,passworddb):
-#             control = 'login ok'
-#         else:
-#             control =  'password wrong'
-#     else:
-#         control = 'email not found'
-#     return {'status':f'{control}'}
+    return info, 201
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -124,109 +112,73 @@ def login():
     if user:
         passworddb = user.password.encode('utf-8')
         if verify_password(password, passworddb):
-            # Login successful, generate JWT token
             token = jwt.encode({
-                'user': user.email,  # or user.id or any identifier you prefer
-                'expiration': str(datetime.utcnow() + timedelta(seconds=60))
+                'user': user.id,  
+                'expiration': str(datetime.utcnow() + timedelta(days=30))
             }, app.config['SECRET_KEY'])
             
             return jsonify({
                 'status': 'login ok',
                 'token': token.decode('utf-8') if isinstance(token, bytes) else token
-            })
+            }), 200
         else:
             return jsonify({'status': 'password wrong'})
     else:
         return jsonify({'status': 'email not found'})
 
-#change-password
-# @app.route('/change-password', methods=['POST'])
-# def change_password():
-#     info = request.json
-#     password = request.json['pass']
-#     email = request.json['email']
-#     user = User.query.filter_by(email=email).first()
-#     if user:
-#         passworddb = user.password.encode('utf-8')
-#         if verify_password(password,passworddb):
-#             control = 'login ok'
-#             hashed_password_bytes = hash_password(info['new'])
-#             hashed_password = hashed_password_bytes.decode('utf-8')
-#             info.update({'pass' : hashed_password})
-#             info.pop('new')
-#             password = request.json['pass']
-#             user.password=password
-#             db.session.commit()
-#             control = 'password changed'
-#         else:
-#             control = 'wrong password'
-#     else:
-#         control = 'email incorrect'
-#     return {'status':f'{control}'}
 @app.route('/change-password', methods=['POST'])
 @token_required
 def change_password():
-    # Token is already validated by the decorator
+
     email = request.token_data['user']
     
-    # Check if new password is provided
     if not request.is_json or 'new' not in request.json:
         return jsonify({'status': 'New password required'}), 400
     
-    # Get user from database using token data
     user = User.query.filter_by(email=email).first()
     if not user:
         return jsonify({'status': 'User not found'}), 404
-    
-    # Optional: Verify current password for additional security
+
     if 'current_pass' in request.json:
         current_password = request.json['current_pass']
         passworddb = user.password.encode('utf-8')
         if not verify_password(current_password, passworddb):
             return jsonify({'status': 'Current password incorrect'}), 403
     
-    # Hash and store the new password
     new_password = request.json['new']
     hashed_password_bytes = hash_password(new_password)
     hashed_password = hashed_password_bytes.decode('utf-8')
     
-    # Update the user's password
     user.password = hashed_password
     db.session.commit()
     
     return jsonify({'status': 'password changed'})
 
-#user
-# @app.route('/user', methods=['POST'])
-# def user():
-#     info = request.json
-#     password = request.json['pass']
-#     email = request.json['email']
-#     user = User.query.filter_by(email=email).first()
-#     if user:
-#         passworddb = user.password.encode('utf-8')
-#         if verify_password(password,passworddb):
-#             control = user.username
-#         else:
-#             control = 'wrong password'
-#     else:
-#         control = 'email not found'
-#     return {'status':f'{control}'}
-
 @app.route('/user', methods=['POST'])
 @token_required
 def user():
-    email = request.token_data['user']
-    user = User.query.filter_by(email=email).first()
+    id = request.token_data['user']
+    user = User.query.filter_by(id=id).first()
     if user:
         return jsonify({'status': user.username})
     else:
         return jsonify({'status': 'User not found'}), 404
+    
+    
+    
+    
+# cria um comentario
+# @app.route('/comment', methods=['POST'])
+# @token_required
 
-# Create all tables
-# with app.app_context():
-#     db.drop_all()
-#     db.create_all()
+# edita um comentario feito por voce
+# @app.route('/comment/<int:id>', methods=['PUT'])
+# @token_required
+
+# remover um comentario feito por voce
+# @app.route('/comment/<int:id>', methods=['DELETE'])
+# @token_required
 
 if __name__ == "__main__":
     app.run()
+    

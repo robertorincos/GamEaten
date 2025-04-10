@@ -17,9 +17,7 @@ def hash_password(plain_password: str) -> bytes:
     Receives a plain text password, returns the hashed password as bytes.
     The salt is embedded in the returned hash.
     """
-    # Generate a salt (which includes the cost factor)
     salt = bcrypt.gensalt()
-    # Hash the password with the salt
     hashed_password = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
     return hashed_password
 
@@ -54,22 +52,3 @@ def check_token():
     params = {'client_id':f'{client}', 'client_secret':f'{secret}', 'grant_type':'client_credentials'}
     x = requests.post(f'https://id.twitch.tv/oauth2/token', params=params)
     return x
-
-def token_required(func):
-    # decorator factory which invoks update_wrapper() method and passes decorated function as an argument
-    @wraps(func)
-    def decorated(*args, **kwargs):
-        token = request.args.get('token')
-        if not token:
-            return jsonify({'Alert!': 'Token is missing!'}), 401
-
-        try:
-
-            data = jwt.decode(token, app.config['SECRET_KEY'])
-        # You can use the JWT errors in exception
-        # except jwt.InvalidTokenError:
-        #     return 'Invalid token. Please log in again.'
-        except:
-            return jsonify({'Message': 'Invalid token'}), 403
-        return func(*args, **kwargs)
-    return decorated
