@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from functools import wraps
 import jwt
-import app
 
 load_dotenv()
 
@@ -17,9 +16,7 @@ def hash_password(plain_password: str) -> bytes:
     Receives a plain text password, returns the hashed password as bytes.
     The salt is embedded in the returned hash.
     """
-    # Generate a salt (which includes the cost factor)
     salt = bcrypt.gensalt()
-    # Hash the password with the salt
     hashed_password = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
     return hashed_password
 
@@ -56,20 +53,24 @@ def check_token():
     return x
 
 def token_required(func):
-    # decorator factory which invoks update_wrapper() method and passes decorated function as an argument
     @wraps(func)
     def decorated(*args, **kwargs):
-        token = request.args.get('token')
+        token = None
+        
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
         if not token:
             return jsonify({'Alert!': 'Token is missing!'}), 401
-
         try:
-
-            data = jwt.decode(token, app.config['SECRET_KEY'])
-        # You can use the JWT errors in exception
-        # except jwt.InvalidTokenError:
-        #     return 'Invalid token. Please log in again.'
-        except:
+            data = jwt.decode(token, os.getenv('secret'), algorithms=["HS256"])
+        except jwt.ExpiredSignatureError:
+            return jsonify({'Message': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
             return jsonify({'Message': 'Invalid token'}), 403
+        
+        request.token_data = data
+        
         return func(*args, **kwargs)
     return decorated
