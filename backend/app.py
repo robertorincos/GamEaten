@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, make_response, request, render_template, session, flash
 import requests
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 import json
 from os import urandom
 import bcrypt
@@ -22,50 +23,32 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(255), unique=False, nullable=False)
-
     def __repr__(self):
         return f'<User {self.username}>'
 
-def token_required(func):
-    @wraps(func)
-    def decorated(*args, **kwargs):
-        token = None
-        
-        if 'Authorization' in request.headers:
-            auth_header = request.headers['Authorization']
-            if auth_header.startswith('Bearer '):
-                token = auth_header.split(' ')[1]
-        if not token:
-            return jsonify({'Alert!': 'Token is missing!'}), 401
-        try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-        except jwt.ExpiredSignatureError:
-            return jsonify({'Message': 'Token has expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'Message': 'Invalid token'}), 403
-        
-        request.token_data = data
-        
-        return func(*args, **kwargs)
-    return decorated
-
-@app.route('/')
-def home():
-    if not session.get('logged_in'):
-        return render_template('login.html')
-    else:
-        return 'logged in currently'
+class Comments(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    id_game = db.Column(db.Integer, unique=False, nullable=False)
+    username = db.Column(db.String(80), unique=False, nullable=False)
+    Comment = db.Column(db.String(255), unique=False, nullable=False)
+    date_created = db.Column(db.DateTime, default=datetime.utcnow)
     
-@app.route('/public')
-def public():
-    return 'For Public'
+    def __repr__(self):
+        return f'<Comment {self.id}>'
+
+    def to_dict(self):
+        return {
+            "id": self.id, 
+            "id_game": self.id_game, 
+            "username": self.username, 
+            "comment": self.Comment, 
+            "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S')
+        }
 
 @app.route('/auth')
 @token_required
 def auth():
     return 'JWT is verified. Welcome to your dashboard ! '
-
-# Login page
 
 @app.route('/search', methods=['POST'])
 def search():
@@ -75,18 +58,20 @@ def search():
     headers = {'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 'Authorization':f'Bearer {token}'}
     body =f'fields *; search "{name}";'
     x = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
-    return jsonify(x.json()), 200
+    return jsonify(x.json()[0]['id']), 200
 
-# rota que com base no id do jogo (no igdb) retorna TODOS os dados do jogo
-# necessário:
-# nome do jogo
-# descrição do jogo
-# poster do jogo
-# imagens cover (links)
-# avaliacoes de criticos e jogadores (links)
-# data de lançamento
-# plataformas
-
+@app.route('/game', methods=['GET'])
+def game():
+    id = request.json['id']
+    if isinstance(id, int):
+        t = check_token()
+        token = t.json()['access_token']
+        headers = {'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 'Authorization':f'Bearer {token}'}
+        body =f'fields name, cover.*, rating, artworks.*, summary, release_dates.human, platforms.name ;where id = {id};'
+        x = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
+        return jsonify(x.json()), 200
+    else:
+        return jsonify({"status": "Invalid ID format. Integer required."}), 400
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -122,9 +107,9 @@ def login():
                 'token': token.decode('utf-8') if isinstance(token, bytes) else token
             }), 200
         else:
-            return jsonify({'status': 'password wrong'})
+            return jsonify({'status': 'password wrong'}), 400
     else:
-        return jsonify({'status': 'email not found'})
+        return jsonify({'status': 'email not found'}), 404
 
 @app.route('/change-password', methods=['POST'])
 @token_required
@@ -152,7 +137,7 @@ def change_password():
     user.password = hashed_password
     db.session.commit()
     
-    return jsonify({'status': 'password changed'})
+    return jsonify({'status': 'password changed'}), 200 
 
 @app.route('/user', methods=['POST'])
 @token_required
@@ -160,24 +145,74 @@ def user():
     id = request.token_data['user']
     user = User.query.filter_by(id=id).first()
     if user:
-        return jsonify({'status': user.username})
+        return jsonify({'status': user.username}), 200
     else:
         return jsonify({'status': 'User not found'}), 404
     
-    
-    
-    
 # cria um comentario
-# @app.route('/comment', methods=['POST'])
-# @token_required
+@app.route('/comment', methods=['POST'])
+@token_required
+def comment():
+    id = request.token_data['user']
+    id_game = request.json['id_game']
+    commented = request.json['comment']
+    new_comment = Comments(username=id, id_game=id_game, Comment=commented)
+    db.session.add(new_comment)
+    db.session.commit()
+    return {'status': 'comentario criado'}, 200
 
 # edita um comentario feito por voce
-# @app.route('/comment/<int:id>', methods=['PUT'])
-# @token_required
+@app.route('/comment/<int:id>', methods=['PUT'])
+@token_required
+def edit(id):
+    #apenas o criador editar
+    comment = Comments.query.get_or_404(id)
+    comment.Comment = request.json['new_comment']
+    db.session.commit()
+    return {"status":"comentario atualizado"}, 200
+
 
 # remover um comentario feito por voce
-# @app.route('/comment/<int:id>', methods=['DELETE'])
-# @token_required
+@app.route('/comment/<int:id>', methods=['DELETE'])
+@token_required
+def delete(id):
+    #apenas o criador deletar
+    comment = Comments.query.get_or_404(id)
+    db.session.delete(comment)
+    db.session.commit()
+    return {"status":"comentario deletado"}, 200
+
+@app.route('/ver', methods = ['GET'])
+@token_required
+def ver():
+    page = request.args.get('page', 1)
+    size = request.args.get('size', 30)
+    id_game = request.json['id_game']
+    username = request.token_data['user']
+    busca = request.json['busca']
+    total_comments = Comments.query.filter_by(id_game=id_game).count()
+    
+    if busca == "game":
+        comments = Comments.query.filter_by(id_game=id_game).limit(size).all()
+        comment_dicts = [comment.to_dict() for comment in comments]
+        result = {
+            "comments": comment_dicts,
+            "pagination": {
+                "total": total_comments,
+                "pages": (total_comments + size - 1) // size,
+                "current_page": page,
+                "per_page": size
+            }
+        }
+        return jsonify(result), 200
+    # if busca == "user":
+    #     comments = Comments.query.filter_by(username=username).all()
+    #     return jsonify(comments.json()), 200
+    # if busca == "ambos":
+    #     comments = Comments.query.filter_by(id_game=id_game, username=username).all()
+    #     return jsonify(comments.json()), 200
+    # else:
+    #     return jsonify({"status": "invalide request"}), 400
 
 if __name__ == "__main__":
     app.run()

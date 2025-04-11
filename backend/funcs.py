@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from functools import wraps
 import jwt
-import app
 
 load_dotenv()
 
@@ -52,3 +51,26 @@ def check_token():
     params = {'client_id':f'{client}', 'client_secret':f'{secret}', 'grant_type':'client_credentials'}
     x = requests.post(f'https://id.twitch.tv/oauth2/token', params=params)
     return x
+
+def token_required(func):
+    @wraps(func)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+        if not token:
+            return jsonify({'Alert!': 'Token is missing!'}), 401
+        try:
+            data = jwt.decode(token, os.getenv('secret'), algorithms=["HS256"])
+        except jwt.ExpiredSignatureError:
+            return jsonify({'Message': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'Message': 'Invalid token'}), 403
+        
+        request.token_data = data
+        
+        return func(*args, **kwargs)
+    return decorated
