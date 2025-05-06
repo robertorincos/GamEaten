@@ -1,0 +1,22 @@
+.features {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    background-color: $background-color; // Assuming $background-color is defined in _variables.scss
+
+    .feature-item {
+        margin: 1rem 0;
+        text-align: center;
+
+        h3 {
+            font-size: 1.5rem;
+            color: $primary-color; // Assuming $primary-color is defined in _variables.scss
+        }
+
+        p {
+            font-size: 1rem;
+            color: $text-color; // Assuming $text-color is defined in _variables.scss
+        }
+    }
+}
