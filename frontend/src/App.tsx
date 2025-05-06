@@ -5,7 +5,7 @@ import SignInSide from './pages/Login/Sign-In/SignInSide'
 function App() {
   return (
     <>
-      <HomePage/>
+      <SignInSide />
     </>
   )
 }
