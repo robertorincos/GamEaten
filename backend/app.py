@@ -217,27 +217,27 @@ def user():
         return jsonify({'status': 'User not found'}), 404
     
 # cria um comentario
-@app.route('/comment', methods=['POST'])
-@token_required
-def comment():
-    id = request.token_data['user']
-    id_game = request.json['id_game']
-    commented = request.json['comment']
-    new_comment = Comments(username=id, id_game=id_game, Comment=commented)
-    db.session.add(new_comment)
-    db.session.commit()
-    return {'status': 'comentario criado'}, 200
+# @app.route('/comment', methods=['POST'])
+# @token_required
+# def comment():
+#     id = request.token_data['user']
+#     id_game = request.json['id_game']
+#     commented = request.json['comment']
+#     new_comment = Comments(username=id, id_game=id_game, Comment=commented)
+#     db.session.add(new_comment)
+#     db.session.commit()
+#     return {'status': 'comentario criado'}, 200
 
-@app.route('/comment/<int:id>', methods=['PUT'])
-@token_required
-def edit(id):
-    user_id = request.token_data['user']
-    comment = Comments.query.get_or_404(id)
-    if str(comment.username) != str(user_id):
-        return jsonify({"status": "Unauthorized - you can only edit your own comments"}), 403
-    comment.Comment = request.json['new_comment']
-    db.session.commit()
-    return {"status":"comentario atualizado"}, 200
+# @app.route('/comment/<int:id>', methods=['PUT'])
+# @token_required
+# def edit(id):
+#     user_id = request.token_data['user']
+#     comment = Comments.query.get_or_404(id)
+#     if str(comment.username) != str(user_id):
+#         return jsonify({"status": "Unauthorized - you can only edit your own comments"}), 403
+#     comment.Comment = request.json['new_comment']
+#     db.session.commit()
+#     return {"status":"comentario atualizado"}, 200
 
 
 @app.route('/comment', methods=['POST'])

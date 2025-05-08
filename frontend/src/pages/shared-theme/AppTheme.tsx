@@ -33,12 +33,16 @@ export default function AppTheme(props: AppThemeProps) {
           shadows,
           shape,
           components: {
-            ...inputsCustomizations,
-            ...dataDisplayCustomizations,
-            ...feedbackCustomizations,
-            ...navigationCustomizations,
-            ...surfacesCustomizations,
-            ...themeComponents,
+            ...(
+              {
+                ...inputsCustomizations,
+                ...dataDisplayCustomizations,
+                ...feedbackCustomizations,
+                ...navigationCustomizations,
+                ...surfacesCustomizations,
+                ...themeComponents,
+              } as ThemeOptions['components']
+            ),
           },
         });
   }, [disableCustomTheme, themeComponents]);

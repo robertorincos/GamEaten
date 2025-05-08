@@ -1,6 +1,12 @@
 import * as React from 'react';
-import { Theme, alpha, Components } from '@mui/material/styles';
+import { Theme as MuiTheme, alpha, Components, CSSObject } from '@mui/material/styles';
 import { SvgIconProps } from '@mui/material/SvgIcon';
+
+// Extend the MUI Theme type to include the vars property
+interface Theme extends MuiTheme {
+  vars?: MuiTheme;
+  applyStyles: (mode: string, styles: object) => CSSObject;
+}
 import { buttonBaseClasses } from '@mui/material/ButtonBase';
 import { dividerClasses } from '@mui/material/Divider';
 import { menuItemClasses } from '@mui/material/MenuItem';
