@@ -46,14 +46,6 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
 /**
  * Register a new user
  */
-export const register = async (userData: RegisterData): Promise<any> => {
-    try {
-        const response = await axiosInstance.post('/register', userData);
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
-};
 
 /**
  * Logout current user - clear token
@@ -92,4 +84,17 @@ export const changePassword = async (data: PasswordChangeData): Promise<any> => 
 export const isAuthenticated = (): boolean => {
     const token = localStorage.getItem('authToken');
     return !!token; // Returns true if token exists, false otherwise
+};
+
+export const register = async (userData: RegisterData): Promise<any> => {
+    try {
+        const response = await axiosInstance.post('/register', userData, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
 };

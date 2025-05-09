@@ -10,8 +10,10 @@ import os
 from dotenv import load_dotenv, set_key
 import jwt
 from email_validator import EmailNotValidError, validate_email 
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 load_dotenv()
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'{os.getenv("DB_URI")}'
@@ -228,16 +230,26 @@ def user():
 #     db.session.commit()
 #     return {'status': 'comentario criado'}, 200
 
-# @app.route('/comment/<int:id>', methods=['PUT'])
-# @token_required
-# def edit(id):
-#     user_id = request.token_data['user']
-#     comment = Comments.query.get_or_404(id)
-#     if str(comment.username) != str(user_id):
-#         return jsonify({"status": "Unauthorized - you can only edit your own comments"}), 403
-#     comment.Comment = request.json['new_comment']
-#     db.session.commit()
-#     return {"status":"comentario atualizado"}, 200
+@app.route('/comment/<int:id>', methods=['PUT'])
+@token_required
+def edit(id):
+    user_id = request.token_data['user']
+    comment = Comments.query.get_or_404(id)
+    if str(comment.username) != str(user_id):
+        return jsonify({"status": "Unauthorized - you can only edit your own comments"}), 403
+    comment.Comment = request.json['new_comment']
+    db.session.commit()
+    return {"status":"comentario atualizado"}, 200
+
+# remover um comentario feito por voce
+@app.route('/comment/<int:id>', methods=['DELETE'])
+@token_required
+def delete(id):
+    #apenas o criador deletar
+    comment = Comments.query.get_or_404(id)
+    db.session.delete(comment)
+    db.session.commit()
+    return {"status":"comentario deletado"}, 200
 
 
 @app.route('/comment', methods=['POST'])

@@ -9,6 +9,8 @@ const axiosInstance = axios.create({
     },
 });
 
+axios.defaults.headers.common['Content-Type'] = 'application/json';
+
 // Request interceptor to add authorization token
 axiosInstance.interceptors.request.use(
     (config) => {
