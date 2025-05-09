@@ -32,6 +32,11 @@ const Card = styled(MuiCard)(({ theme }) => ({
   }),
 }));
 
+const handleLoginSuccess = () => {
+  // Any success logic...
+  window.location.href = '/home'; // Direct navigation to home page
+};
+
 export default function SignInCard() {
   const [emailError, setEmailError] = React.useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
@@ -57,6 +62,7 @@ export default function SignInCard() {
       email: data.get('email'),
       password: data.get('password'),
     });
+    handleLoginSuccess();
   };
 
   const validateInputs = () => {
@@ -161,9 +167,14 @@ export default function SignInCard() {
           Don&apos;t have an account?{' '}
           <span>
             <Link
-              href="/material-ui/getting-started/templates/sign-in/"
+              component="a"
+              href="/signup"
               variant="body2"
-              sx={{ alignSelf: 'center' }}
+              sx={{ alignSelf: 'center', cursor: 'pointer' }}
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.href = '/signup'; // Direct navigation to sign-up page
+              }}
             >
               Sign up
             </Link>

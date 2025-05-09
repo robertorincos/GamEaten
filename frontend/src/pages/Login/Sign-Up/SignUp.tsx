@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom'; // Import RouterLink
+import { useNavigate as useReactRouterNavigate, Link as RouterLink, BrowserRouter } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
-import Container from '@mui/material/Container'; // Make sure this is imported correctly
+import Container from '@mui/material/Container';
 import CssBaseline from '@mui/material/CssBaseline';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -69,7 +69,27 @@ const SignUpContainer = styled(Container)(({ theme }) => ({
   },
 }));
 
+// Add this custom hook to safely handle navigation both inside and outside Router context
+function useCustomNavigate() {
+  // Try to use React Router's navigate, but don't throw if we're outside Router context
+  let navigate;
+  try {
+    navigate = useReactRouterNavigate();
+    return navigate;
+  } catch (e) {
+    // If we're outside Router context, return a function that logs the navigation
+    return (path: string) => {
+      console.log(`Would navigate to ${path}`);
+      // You could also use window.location.href = path; for actual navigation
+      // window.location.href = path;
+    };
+  }
+}
+
 export default function SignUp(props: { disableCustomTheme?: boolean }) {
+  // Replace navigate with our custom hook
+  const navigate = useCustomNavigate();
+  
   const [emailError, setEmailError] = React.useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
   const [passwordError, setPasswordError] = React.useState(false);
@@ -79,10 +99,6 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
-  const navigate = (path: string) => {
-    console.log(`Would navigate to ${path}`);
-    // In a real app, this would use history to navigate
-  };
 
   const validateInputs = () => {
     const email = document.getElementById('email') as HTMLInputElement;
@@ -144,9 +160,9 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
       
       setSubmitSuccess('Account created successfully! Redirecting to login...');
       
-      // Redirect to login page after successful registration
+      // Replace the navigate function with direct navigation
       setTimeout(() => {
-        navigate('/login');
+        window.location.href = '/login';
       }, 2000);
       
     } catch (error: any) {
@@ -164,7 +180,8 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
     }
   };
 
-  return (
+  // Render the component in a Router if we detect we're not in one already
+  const content = (
     <AppTheme {...props}>
       <CssBaseline enableColorScheme />
       <ColorModeSelect sx={{ position: 'fixed', top: '1rem', right: '1rem' }} />
@@ -222,7 +239,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
                 variant="outlined"
                 error={emailError}
                 helperText={emailErrorMessage}
-                color={emailError ? 'error' : 'primary'} // Should use emailError, not passwordError
+                color={emailError ? 'error' : 'primary'}
               />
             </FormControl>
             <FormControl>
@@ -277,10 +294,14 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
             <Typography sx={{ textAlign: 'center' }}>
               Already have an account?{' '}
               <Link
-                component="button"
-                onClick={() => navigate('/login')}
+                component="a"
+                href="/login"
                 variant="body2"
-                sx={{ alignSelf: 'center' }}
+                sx={{ alignSelf: 'center', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.location.href = '/login'; // This ensures full navigation
+                }}
               >
                 Sign in
               </Link>
@@ -289,5 +310,22 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
         </Card>
       </SignUpContainer>
     </AppTheme>
+  );
+
+  // Check if we're inside a Router context
+  const isInRouterContext = (() => {
+    try {
+      useReactRouterNavigate();
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  // If we're not in a Router context, wrap the content in a Router
+  return isInRouterContext ? content : (
+    <BrowserRouter>
+      {content}
+    </BrowserRouter>
   );
 }
