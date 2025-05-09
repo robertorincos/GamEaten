@@ -1,7 +1,9 @@
 import * as React from 'react';
+import { useNavigate, Link as RouterLink } from 'react-router-dom'; // Import RouterLink
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Container from '@mui/material/Container'; // Make sure this is imported correctly
 import CssBaseline from '@mui/material/CssBaseline';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -10,25 +12,25 @@ import FormControl from '@mui/material/FormControl';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
 import MuiCard from '@mui/material/Card';
 import { styled } from '@mui/material/styles';
+
 import AppTheme from '../../shared-theme/AppTheme';
 import ColorModeSelect from '../../shared-theme/ColorModeSelect';
 import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../../../contexts/components/CustomIcons/CustomIcons';
 import { register } from '../../../api/auth';
 import { useState } from 'react';
-import Alert from '@mui/material/Alert';
-import { useNavigate } from 'react-router-dom';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
-  alignSelf: 'center',
+  alignItems: 'center',
   width: '100%',
   padding: theme.spacing(4),
   gap: theme.spacing(2),
   margin: 'auto',
+  marginTop: theme.spacing(4),
   boxShadow:
     'hsla(220, 30%, 5%, 0.05) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.05) 0px 15px 35px -5px',
   [theme.breakpoints.up('sm')]: {
@@ -40,10 +42,14 @@ const Card = styled(MuiCard)(({ theme }) => ({
   }),
 }));
 
-const SignUpContainer = styled(Stack)(({ theme }) => ({
-  height: 'calc((1 - var(--template-frame-height, 0)) * 100dvh)',
-  minHeight: '100%',
+const SignUpContainer = styled(Container)(({ theme }) => ({
+  minHeight: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
   padding: theme.spacing(2),
+  position: 'relative',
   [theme.breakpoints.up('sm')]: {
     padding: theme.spacing(4),
   },
@@ -73,7 +79,10 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
-  const navigate = useNavigate();
+  const navigate = (path: string) => {
+    console.log(`Would navigate to ${path}`);
+    // In a real app, this would use history to navigate
+  };
 
   const validateInputs = () => {
     const email = document.getElementById('email') as HTMLInputElement;
@@ -159,13 +168,13 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
     <AppTheme {...props}>
       <CssBaseline enableColorScheme />
       <ColorModeSelect sx={{ position: 'fixed', top: '1rem', right: '1rem' }} />
-      <SignUpContainer direction="column" justifyContent="space-between">
+      <SignUpContainer maxWidth="sm">
         <Card variant="outlined">
           <SitemarkIcon />
           <Typography
             component="h1"
             variant="h4"
-            sx={{ width: '100%', fontSize: 'clamp(2rem, 10vw, 2.15rem)' }}
+            sx={{ width: '100%', textAlign: 'center', fontSize: 'clamp(2rem, 10vw, 2.15rem)' }}
           >
             Sign up
           </Typography>
@@ -185,7 +194,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
           <Box
             component="form"
             onSubmit={handleSubmit}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}
           >
             <FormControl>
               <FormLabel htmlFor="name">Full name</FormLabel>
@@ -213,7 +222,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
                 variant="outlined"
                 error={emailError}
                 helperText={emailErrorMessage}
-                color={passwordError ? 'error' : 'primary'}
+                color={emailError ? 'error' : 'primary'} // Should use emailError, not passwordError
               />
             </FormControl>
             <FormControl>
@@ -268,7 +277,8 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
             <Typography sx={{ textAlign: 'center' }}>
               Already have an account?{' '}
               <Link
-                href="/material-ui/getting-started/templates/sign-in/"
+                component="button"
+                onClick={() => navigate('/login')}
                 variant="body2"
                 sx={{ alignSelf: 'center' }}
               >
