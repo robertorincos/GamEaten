@@ -16,6 +16,10 @@ import { styled } from '@mui/material/styles';
 import AppTheme from '../../shared-theme/AppTheme';
 import ColorModeSelect from '../../shared-theme/ColorModeSelect';
 import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../../../contexts/components/CustomIcons/CustomIcons';
+import { register } from '../../../api/auth';
+import { useState } from 'react';
+import Alert from '@mui/material/Alert';
+import { useNavigate } from 'react-router-dom';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -66,6 +70,10 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
   const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
   const [nameError, setNameError] = React.useState(false);
   const [nameErrorMessage, setNameErrorMessage] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState('');
+  const navigate = useNavigate();
 
   const validateInputs = () => {
     const email = document.getElementById('email') as HTMLInputElement;
@@ -104,18 +112,47 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
     return isValid;
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    if (nameError || emailError || passwordError) {
-      event.preventDefault();
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    
+    // First validate inputs
+    if (!validateInputs()) {
       return;
     }
+    
+    setIsSubmitting(true);
+    setSubmitError('');
+    setSubmitSuccess('');
+    
     const data = new FormData(event.currentTarget);
-    console.log({
-      name: data.get('name'),
-      lastName: data.get('lastName'),
-      email: data.get('email'),
-      password: data.get('password'),
-    });
+    
+    try {
+      const response = await register({
+        user: data.get('name') as string,
+        email: data.get('email') as string,
+        pass: data.get('password') as string
+      });
+      
+      setSubmitSuccess('Account created successfully! Redirecting to login...');
+      
+      // Redirect to login page after successful registration
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      
+      if (error.status === 409) {
+        setSubmitError('Email already registered. Please use a different email address.');
+      } else if (error.data && error.data.message) {
+        setSubmitError(error.data.message);
+      } else {
+        setSubmitError('Failed to create account. Please try again later.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -132,6 +169,19 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
           >
             Sign up
           </Typography>
+          
+          {submitError && (
+            <Alert severity="error" sx={{ width: '100%' }}>
+              {submitError}
+            </Alert>
+          )}
+          
+          {submitSuccess && (
+            <Alert severity="success" sx={{ width: '100%' }}>
+              {submitSuccess}
+            </Alert>
+          )}
+          
           <Box
             component="form"
             onSubmit={handleSubmit}
@@ -190,9 +240,9 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
               type="submit"
               fullWidth
               variant="contained"
-              onClick={validateInputs}
+              disabled={isSubmitting}
             >
-              Sign up
+              {isSubmitting ? 'Signing up...' : 'Sign up'}
             </Button>
           </Box>
           <Divider>
