@@ -392,10 +392,14 @@ def ver():
                 "per_page": size
             }
         }
-        return jsonify(result), 200
-        
+        return jsonify(result), 200    
     else:
         return jsonify({"status": "invalid request"}), 400
+
+# Create all tables
+# with app.app_context():
+#     db.create_all()
+
 if __name__ == "__main__":
     app.run()
     
