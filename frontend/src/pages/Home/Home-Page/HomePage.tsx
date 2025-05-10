@@ -25,7 +25,7 @@ export const HomePage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<number | null>(null);
-  const [suggestions, setSuggestions] = useState<Array<{id: number, name: string, price?: string}>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
@@ -88,13 +88,7 @@ export const HomePage = () => {
       setSearchLoading(true);
       try {
         const results = await searchGameSuggestions({ query });
-        // For demo purposes, we'll add random prices to the suggestions
-        const resultsWithPrice = results.map(game => ({
-          ...game,
-          // Add a random price between 19-59 dollars
-          price: `R$ ${(Math.floor(Math.random() * 40) + 19).toFixed(2)}`
-        }));
-        setSuggestions(resultsWithPrice);
+        setSuggestions(results);
         setShowSuggestions(true);
       } catch (error) {
         console.error('Error fetching suggestions:', error);
@@ -259,117 +253,6 @@ export const HomePage = () => {
         </Box>
 
         <Box sx={{ p: 2 }}>
-          <Box sx={{ position: 'relative' }}>
-            <Paper
-              sx={{
-                p: '2px 4px',
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: '30px',
-                backgroundColor: '#172331',
-                mb: 3,
-                border: '1px solid #1e2c3c',
-              }}
-            >
-              <IconButton 
-                sx={{ p: '10px', color: '#8899a6' }}
-                onClick={handleSearch}
-                disabled={searchLoading}
-              >
-                <FontAwesomeIcon icon={searchLoading ? faSpinner : faSearch} spin={searchLoading} />
-              </IconButton>
-              <InputBase
-                sx={{ ml: 1, flex: 1, color: 'white' }}
-                placeholder="Search game posts"
-                inputProps={{ 'aria-label': 'search games' }}
-                value={searchQuery}
-                onChange={handleSearchInputChange}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                onBlur={() => setTimeout(() => handleClickOutside(), 200)}
-              />
-            </Paper>
-            
-            {showSuggestions && suggestions.length > 0 && (
-              <Paper 
-                sx={{ 
-                  position: 'absolute', 
-                  width: '100%', 
-                  zIndex: 20, 
-                  mt: -2, 
-                  backgroundColor: '#171a21', // Darker background similar to Steam
-                  border: '1px solid #2a475e', // Steam-like border color
-                  borderRadius: '2px',
-                  maxHeight: '400px',
-                  overflowY: 'auto',
-                  boxShadow: '0 0 12px rgba(0, 0, 0, 0.4)'
-                }}
-              >
-                <List disablePadding>
-                  {suggestions.map((game) => (
-                    <ListItem 
-                      key={game.id} 
-                      onClick={() => handleSelectSuggestion(game.id)}
-                      disablePadding
-                      sx={{ 
-                        '&:hover': { 
-                          backgroundColor: 'rgba(37, 51, 65, 0.9)'
-                        },
-                        borderBottom: '1px solid #2a475e',
-                        padding: 0,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Box sx={{ 
-                        display: 'flex',
-                        width: '100%',
-                        padding: '10px 15px',
-                      }}>
-                        {/* Game image placeholder */}
-                        <Box
-                          sx={{
-                            width: '120px',
-                            height: '45px',
-                            backgroundColor: '#2a475e', 
-                            borderRadius: '2px',
-                            marginRight: '12px',
-                            flexShrink: 0
-                          }}
-                        />
-                        
-                        <Box sx={{ 
-                          display: 'flex', 
-                          flexDirection: 'column',
-                          justifyContent: 'center',
-                          flex: 1
-                        }}>
-                          <Typography
-                            sx={{ 
-                              color: 'white',
-                              fontSize: '14px',
-                              fontWeight: 500
-                            }}
-                          >
-                            {game.name}
-                          </Typography>
-                          
-                          <Typography 
-                            sx={{ 
-                              color: '#acdbf5', 
-                              fontSize: '13px',
-                              fontWeight: 700,
-                              marginTop: '4px'
-                            }}
-                          >
-                            {game.price || 'R$ 29,99'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            )}
-          </Box>
           <GameFeed />
         </Box>
       </Box>
