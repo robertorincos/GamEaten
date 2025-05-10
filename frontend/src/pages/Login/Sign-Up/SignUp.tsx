@@ -214,7 +214,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
             sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}
           >
             <FormControl>
-              <FormLabel htmlFor="name">Full name</FormLabel>
+              <FormLabel htmlFor="name">Username</FormLabel>
               <TextField
                 autoComplete="name"
                 name="name"
