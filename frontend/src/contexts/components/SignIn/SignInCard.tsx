@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import MuiCard from '@mui/material/Card';
@@ -13,6 +14,8 @@ import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import ForgotPassword from '../ForgotPass/ForgotPassword';
 import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../CustomIcons/CustomIcons';
+import { login } from '../../../api/auth';
+import { useState } from 'react';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -32,17 +35,15 @@ const Card = styled(MuiCard)(({ theme }) => ({
   }),
 }));
 
-const handleLoginSuccess = () => {
-  // Any success logic...
-  window.location.href = '/home'; // Direct navigation to home page
-};
-
 export default function SignInCard() {
-  const [emailError, setEmailError] = React.useState(false);
-  const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
-  const [passwordError, setPasswordError] = React.useState(false);
-  const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
-  const [open, setOpen] = React.useState(false);
+  const navigate = useNavigate();
+  const [emailError, setEmailError] = useState(false);
+  const [emailErrorMessage, setEmailErrorMessage] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  const [passwordErrorMessage, setPasswordErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [open, setOpen] = useState(false);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -52,17 +53,9 @@ export default function SignInCard() {
     setOpen(false);
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    if (emailError || passwordError) {
-      event.preventDefault();
-      return;
-    }
-    const data = new FormData(event.currentTarget);
-    console.log({
-      email: data.get('email'),
-      password: data.get('password'),
-    });
-    handleLoginSuccess();
+  const handleLoginSuccess = () => {
+    // Use React Router's navigate for client-side navigation
+    navigate('/home');
   };
 
   const validateInputs = () => {
@@ -92,6 +85,41 @@ export default function SignInCard() {
     return isValid;
   };
 
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    
+    // Reset error state
+    setLoginError('');
+    
+    if (!validateInputs()) {
+      return;
+    }
+
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    try {
+      setIsLoading(true);
+      const response = await login({
+        email: email,
+        pass: password
+      });
+      
+      if (response.status === "success" && response.token) {
+        // Authentication successful
+        handleLoginSuccess();
+      } else {
+        setLoginError('Invalid credentials');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setLoginError('Authentication failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Card variant="outlined">
       <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
@@ -104,6 +132,11 @@ export default function SignInCard() {
       >
         Sign in
       </Typography>
+      {loginError && (
+        <Typography color="error" sx={{ textAlign: 'center' }}>
+          {loginError}
+        </Typography>
+      )}
       <Box
         component="form"
         onSubmit={handleSubmit}
@@ -160,21 +193,22 @@ export default function SignInCard() {
           label="Remember me"
         />
         <ForgotPassword open={open} handleClose={handleClose} />
-        <Button type="submit" fullWidth variant="contained" onClick={validateInputs}>
-          Sign in
+        <Button 
+          type="submit" 
+          fullWidth 
+          variant="contained" 
+          disabled={isLoading}
+        >
+          {isLoading ? 'Signing in...' : 'Sign in'}
         </Button>
         <Typography sx={{ textAlign: 'center' }}>
           Don&apos;t have an account?{' '}
           <span>
             <Link
-              component="a"
-              href="/signup"
+              component={RouterLink} // Use Router Link instead of native anchor
+              to="/signup"
               variant="body2"
               sx={{ alignSelf: 'center', cursor: 'pointer' }}
-              onClick={(e) => {
-                e.preventDefault();
-                window.location.href = '/signup'; // Direct navigation to sign-up page
-              }}
             >
               Sign up
             </Link>

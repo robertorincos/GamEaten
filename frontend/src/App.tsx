@@ -1,19 +1,36 @@
 import './App.scss'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import SignUp from './pages/Login/Sign-Up/SignUp';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { isAuthenticated } from './api/auth';
 import SignInSide from './pages/Login/Sign-In/SignInSide';
+import SignUp from './pages/Login/Sign-Up/SignUp';
 import HomePage from './pages/Home/Home-Page/HomePage';
+
+// Define props interface for ProtectedRoute
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+}
+
+// Protected route component with proper typing
+const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  return isAuthenticated() ? children : <Navigate to="/" />;
+};
 
 function App() {
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        <Route path="/signup" element={<SignUp />} />
-        <Route path="/login" element={<SignInSide />} />
-        <Route path="/home" element={<HomePage />} />
         <Route path="/" element={<SignInSide />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route 
+          path="/home" 
+          element={
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          } 
+        />
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 }
 

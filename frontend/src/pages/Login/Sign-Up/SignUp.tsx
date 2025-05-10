@@ -162,7 +162,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
       
       // Replace the navigate function with direct navigation
       setTimeout(() => {
-        window.location.href = '/login';
+        window.location.href = '/';
       }, 2000);
       
     } catch (error: any) {
@@ -295,12 +295,12 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
               Already have an account?{' '}
               <Link
                 component="a"
-                href="/login"
+                href="/"
                 variant="body2"
                 sx={{ alignSelf: 'center', cursor: 'pointer' }}
                 onClick={(e) => {
                   e.preventDefault();
-                  window.location.href = '/login'; // This ensures full navigation
+                  window.location.href = '/'; // This ensures full navigation
                 }}
               >
                 Sign in
