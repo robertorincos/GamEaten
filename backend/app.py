@@ -82,12 +82,25 @@ def search():
     except Exception as e:
         return jsonify({"status": f"An error occurred: {str(e)}"}), 500
 
-@app.route('/game', methods=['GET'])
+@app.route('/game', methods=['GET', 'POST'])
 def game():
     try:
-        if 'id' not in request.json:
-            return jsonify({"status": "ID is required"}), 400
-        id_value = request.json['id']
+        # Get the ID value from the request (JSON body for POST or query params for GET)
+        id_value = None
+        
+        if request.method == 'POST':
+            if not request.is_json:
+                return jsonify({"status": "JSON request expected"}), 400
+                
+            if 'id' not in request.json:
+                return jsonify({"status": "ID is required"}), 400
+                
+            id_value = request.json['id']
+        elif request.method == 'GET':
+            if 'id' not in request.args:
+                return jsonify({"status": "ID is required"}), 400
+                
+            id_value = request.args.get('id')
 
         if not isinstance(id_value, (int, str)):
             return jsonify({"status": "ID must be an integer or string convertible to integer"}), 400
@@ -114,6 +127,8 @@ def game():
         return jsonify(response.json()), 200
     except ValueError as e:
         return jsonify({"status": f"Invalid ID format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"status": f"An error occurred: {str(e)}"}), 500
     except Exception as e:
         print(f"Error in /game route: {str(e)}")
         return jsonify({"status": "An error occurred processing your request"}), 500

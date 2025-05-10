@@ -113,7 +113,6 @@ const Game = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-
   // Fetch game details
   useEffect(() => {
     const fetchGameDetails = async () => {
@@ -122,10 +121,19 @@ const Game = () => {
       try {
         setLoading(true);
         const gameId = parseInt(id, 10);
+        
+        if (isNaN(gameId)) {
+          console.error('Invalid game ID');
+          setLoading(false);
+          return;
+        }
+        
         const response = await getGameDetails({ id: gameId });
         
         if (response && Array.isArray(response) && response.length > 0) {
           setGameDetails(response[0]);
+        } else if (response && response.status === "Game not found") {
+          console.error('Game not found');
         } else {
           console.error('Invalid game data format:', response);
         }
