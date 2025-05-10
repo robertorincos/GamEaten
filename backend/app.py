@@ -172,7 +172,7 @@ def login():
             }, app.config['SECRET_KEY'], algorithm="HS256")
             
             return jsonify({
-                'status': 'login ok',
+                'status': 'success',
                 'token': token.decode('utf-8') if isinstance(token, bytes) else token
             }), 200
         else:
