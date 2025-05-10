@@ -1,4 +1,4 @@
-import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase } from '@mui/material';
+import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
 import { useState, useEffect } from 'react';
 import GameFeed from '../../../contexts/components/GameFeed/GameFeed.tsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -12,14 +12,21 @@ import {
   faSearch,
   faSignOutAlt,
   faGamepad,
-  faUser
+  faUser,
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth.ts';
+import { searchGame, searchGameSuggestions } from '../../../api/funcs.ts';
 
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('following');
   const [username, setUsername] = useState('Guest');
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{id: number, name: string, price?: string}>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -50,6 +57,63 @@ export const HomePage = () => {
     logout();
     // Redirect to login page or refresh
     window.location.href = '/';
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    try {
+      setSearchLoading(true);
+      const gameId = await searchGame({ query: searchQuery });
+      
+      if (gameId) {
+        // Handle successful search - could navigate to game page
+        console.log(`Found game with ID: ${gameId}`);
+        setSearchResults(gameId);
+        window.location.href = `/game/${gameId}`;
+      }
+    } catch (error) {
+      console.error('Search failed:', error);
+      // Handle search error - could show an error message
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    if (query.trim().length >= 2) {
+      setSearchLoading(true);
+      try {
+        const results = await searchGameSuggestions({ query });
+        // For demo purposes, we'll add random prices to the suggestions
+        const resultsWithPrice = results.map(game => ({
+          ...game,
+          // Add a random price between 19-59 dollars
+          price: `R$ ${(Math.floor(Math.random() * 40) + 19).toFixed(2)}`
+        }));
+        setSuggestions(resultsWithPrice);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
+      } finally {
+        setSearchLoading(false);
+      }
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (gameId: number) => {
+    setShowSuggestions(false);
+    window.location.href = `/game/${gameId}`;
+  };
+
+  const handleClickOutside = () => {
+    setShowSuggestions(false);
   };
 
   return (
@@ -195,26 +259,117 @@ export const HomePage = () => {
         </Box>
 
         <Box sx={{ p: 2 }}>
-          <Paper
-            sx={{
-              p: '2px 4px',
-              display: 'flex',
-              alignItems: 'center',
-              borderRadius: '30px',
-              backgroundColor: '#172331',
-              mb: 3,
-              border: '1px solid #1e2c3c'
-            }}
-          >
-            <IconButton sx={{ p: '10px', color: '#8899a6' }}>
-              <FontAwesomeIcon icon={faSearch} />
-            </IconButton>
-            <InputBase
-              sx={{ ml: 1, flex: 1, color: 'white' }}
-              placeholder="Search game posts"
-              inputProps={{ 'aria-label': 'search games' }}
-            />
-          </Paper>
+          <Box sx={{ position: 'relative' }}>
+            <Paper
+              sx={{
+                p: '2px 4px',
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '30px',
+                backgroundColor: '#172331',
+                mb: 3,
+                border: '1px solid #1e2c3c',
+              }}
+            >
+              <IconButton 
+                sx={{ p: '10px', color: '#8899a6' }}
+                onClick={handleSearch}
+                disabled={searchLoading}
+              >
+                <FontAwesomeIcon icon={searchLoading ? faSpinner : faSearch} spin={searchLoading} />
+              </IconButton>
+              <InputBase
+                sx={{ ml: 1, flex: 1, color: 'white' }}
+                placeholder="Search game posts"
+                inputProps={{ 'aria-label': 'search games' }}
+                value={searchQuery}
+                onChange={handleSearchInputChange}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                onBlur={() => setTimeout(() => handleClickOutside(), 200)}
+              />
+            </Paper>
+            
+            {showSuggestions && suggestions.length > 0 && (
+              <Paper 
+                sx={{ 
+                  position: 'absolute', 
+                  width: '100%', 
+                  zIndex: 20, 
+                  mt: -2, 
+                  backgroundColor: '#171a21', // Darker background similar to Steam
+                  border: '1px solid #2a475e', // Steam-like border color
+                  borderRadius: '2px',
+                  maxHeight: '400px',
+                  overflowY: 'auto',
+                  boxShadow: '0 0 12px rgba(0, 0, 0, 0.4)'
+                }}
+              >
+                <List disablePadding>
+                  {suggestions.map((game) => (
+                    <ListItem 
+                      key={game.id} 
+                      onClick={() => handleSelectSuggestion(game.id)}
+                      disablePadding
+                      sx={{ 
+                        '&:hover': { 
+                          backgroundColor: 'rgba(37, 51, 65, 0.9)'
+                        },
+                        borderBottom: '1px solid #2a475e',
+                        padding: 0,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Box sx={{ 
+                        display: 'flex',
+                        width: '100%',
+                        padding: '10px 15px',
+                      }}>
+                        {/* Game image placeholder */}
+                        <Box
+                          sx={{
+                            width: '120px',
+                            height: '45px',
+                            backgroundColor: '#2a475e', 
+                            borderRadius: '2px',
+                            marginRight: '12px',
+                            flexShrink: 0
+                          }}
+                        />
+                        
+                        <Box sx={{ 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          flex: 1
+                        }}>
+                          <Typography
+                            sx={{ 
+                              color: 'white',
+                              fontSize: '14px',
+                              fontWeight: 500
+                            }}
+                          >
+                            {game.name}
+                          </Typography>
+                          
+                          <Typography 
+                            sx={{ 
+                              color: '#acdbf5', 
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              marginTop: '4px'
+                            }}
+                          >
+                            {game.price || 'R$ 29,99'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            )}
+          </Box>
           <GameFeed />
         </Box>
       </Box>
@@ -230,26 +385,74 @@ export const HomePage = () => {
           overflowY: 'auto'
         }}
       >
-        <Paper
-          sx={{
-            p: '2px 4px',
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: '30px',
-            backgroundColor: '#172331',
-            mb: 3,
-            border: '1px solid #1e2c3c'
-          }}
-        >
-          <IconButton sx={{ p: '10px', color: '#8899a6' }}>
-            <FontAwesomeIcon icon={faSearch} />
-          </IconButton>
-          <InputBase
-            sx={{ ml: 1, flex: 1, color: 'white' }}
-            placeholder="Search GamEaten"
-            inputProps={{ 'aria-label': 'search' }}
-          />
-        </Paper>
+        <Box sx={{ position: 'relative' }}>
+          <Paper
+            sx={{
+              p: '2px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: '30px',
+              backgroundColor: '#172331',
+              mb: 3,
+              border: '1px solid #1e2c3c'
+            }}
+          >
+            <IconButton 
+              sx={{ p: '10px', color: '#8899a6' }}
+              onClick={handleSearch}
+              disabled={searchLoading}
+            >
+              <FontAwesomeIcon icon={searchLoading ? faSpinner : faSearch} spin={searchLoading} />
+            </IconButton>
+            <InputBase
+              sx={{ ml: 1, flex: 1, color: 'white' }}
+              placeholder="Search GamEaten"
+              inputProps={{ 'aria-label': 'search' }}
+              value={searchQuery}
+              onChange={handleSearchInputChange}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              onBlur={() => setTimeout(() => handleClickOutside(), 200)}
+            />
+          </Paper>
+
+          {showSuggestions && suggestions.length > 0 && (
+            <Paper 
+              sx={{ 
+                position: 'absolute', 
+                width: '100%', 
+                zIndex: 20, 
+                mt: -2, 
+                backgroundColor: '#172331',
+                border: '1px solid #1e2c3c',
+                borderRadius: '10px',
+                maxHeight: '300px',
+                overflowY: 'auto'
+              }}
+            >
+              <List>
+                {suggestions.map((game) => (
+                  <ListItem 
+                    key={game.id} 
+                    onClick={() => handleSelectSuggestion(game.id)}
+                    sx={{ 
+                      '&:hover': { 
+                        backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                      },
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <ListItemText 
+                      primary={game.name} 
+                      primaryTypographyProps={{ 
+                        sx: { color: 'white' }
+                      }} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          )}
+        </Box>
 
         <Box 
           sx={{ 
@@ -327,27 +530,23 @@ export const HomePage = () => {
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[1, 2, 3].map((item) => (
-              <Box key={item} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Avatar sx={{ width: 40, height: 40, mr: 2 }} />
-                  <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Gamer #{item}</Typography>
-                    <Typography variant="body2" sx={{ color: '#8899a6' }}>@gamer{item}</Typography>
-                  </Box>
-                </Box>
-                <Box 
-                  sx={{ 
-                    backgroundColor: 'white', 
-                    color: 'black', 
-                    borderRadius: '30px', 
-                    px: 2, 
-                    py: 1, 
-                    fontWeight: 700,
-                    fontSize: '0.8rem', 
-                    cursor: 'pointer' 
-                  }}
-                >
-                  Follow
+              <Box 
+                key={item} 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  padding: '8px 15px',
+                  borderRadius: '10px',
+                  '&:hover': {
+                    backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                  },
+                  cursor: 'pointer'
+                }}
+              >
+                <Avatar variant="rounded" sx={{ width: 40, height: 40, mr: 2 }} />
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>User {item}</Typography>
+                  <Typography variant="body2" sx={{ color: '#8899a6' }}>@user{item}</Typography>
                 </Box>
               </Box>
             ))}

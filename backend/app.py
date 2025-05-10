@@ -396,10 +396,50 @@ def ver():
     else:
         return jsonify({"status": "invalid request"}), 400
 
+@app.route('/suggestions', methods=['POST'])
+def suggestions():
+    if not request.is_json:
+        return jsonify({"status": "Request must be JSON"}), 400
+    
+    if 'query' not in request.json or not request.json['query']:
+        return jsonify([]), 400
+    
+    name = request.json['query']
+    
+    if len(name) < 2:  # Minimum 2 characters for search
+        return jsonify([]), 400
+        
+    if len(name) > 100:
+        return jsonify({"status": "Query too long"}), 400
+        
+    sanitized_name = name.replace('"', '')
+    
+    try:
+        t = check_token()
+        token = t.json()['access_token']
+        headers = {'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 'Authorization':f'Bearer {token}'}
+        body = f'fields id,name; limit 5; search "{sanitized_name}";'
+        response = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
+        result = response.json()
+        
+        # Format the data for the frontend
+        suggestions = []
+        for game in result[:5]:  # Limit to 5 results
+            if 'id' in game and 'name' in game:
+                suggestions.append({
+                    'id': game['id'],
+                    'name': game['name']
+                })
+        
+        return jsonify(suggestions), 200
+    
+    except Exception as e:
+        print(f"Error in suggestions route: {str(e)}")
+        return jsonify([]), 500
+
 # Create all tables
 #with app.app_context():
 #    db.create_all()
 
 if __name__ == "__main__":
     app.run()
-    
