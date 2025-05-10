@@ -49,7 +49,7 @@ export const HomePage = () => {
   const handleLogout = () => {
     logout();
     // Redirect to login page or refresh
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   return (
