@@ -397,8 +397,8 @@ def ver():
         return jsonify({"status": "invalid request"}), 400
 
 # Create all tables
-# with app.app_context():
-#     db.create_all()
+#with app.app_context():
+#    db.create_all()
 
 if __name__ == "__main__":
     app.run()

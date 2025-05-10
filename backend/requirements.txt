@@ -12,3 +12,5 @@ requests==2.32.3
 PyMySQL==1.1.1
 pyjwt==2.10.1
 dotenv
+email-validator
+Flask-Cors==3.0.10
