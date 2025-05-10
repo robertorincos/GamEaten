@@ -1,5 +1,5 @@
 import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase } from '@mui/material';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import GameFeed from '../../../contexts/components/GameFeed/GameFeed.tsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -14,12 +14,42 @@ import {
   faGamepad,
   faUser
 } from '@fortawesome/free-solid-svg-icons';
+import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth.ts';
 
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('following');
+  const [username, setUsername] = useState('Guest');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (isAuthenticated()) {
+        try {
+          const userData = await getCurrentUser();
+          if (userData && userData.status) {
+            setUsername(userData.status);
+          }
+        } catch (error) {
+          console.error('Failed to fetch user data:', error);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+      }
+    };
+
+    fetchUser();
+  }, []);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+  };
+
+  const handleLogout = () => {
+    logout();
+    // Redirect to login page or refresh
+    window.location.href = '/login';
   };
 
   return (
@@ -233,8 +263,12 @@ export const HomePage = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Avatar sx={{ width: 60, height: 60 }} />
             <Box sx={{ ml: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Username</Typography>
-              <Typography variant="body2" sx={{ color: '#8899a6' }}>@username</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                {loading ? 'Loading...' : username}
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                @{loading ? '...' : username.toLowerCase()}
+              </Typography>
             </Box>
           </Box>
           
@@ -270,7 +304,10 @@ export const HomePage = () => {
             <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
               <FontAwesomeIcon icon={faCog} />
             </IconButton>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
+            <IconButton 
+              sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
+              onClick={handleLogout}
+            >
               <FontAwesomeIcon icon={faSignOutAlt} />
             </IconButton>
           </Box>
