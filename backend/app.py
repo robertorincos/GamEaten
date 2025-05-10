@@ -309,7 +309,7 @@ def comment():
         db.session.rollback()
         return jsonify({"status": f"Error creating comment: {str(e)}"}), 500
 
-@app.route('/ver', methods = ['GET'])
+@app.route('/ver', methods = ['GET', 'POST'])
 @token_required
 def ver():
     # Validar e converter parâmetros da query
@@ -327,32 +327,57 @@ def ver():
     except ValueError:
         return jsonify({"status": "Size must be an integer"}), 400
     
-    # Verificar se o corpo da requisição existe
-    if not request.is_json:
-        return jsonify({"status": "Request must be JSON"}), 400
-        
-    # Verificar campos obrigatórios
-    if 'busca' not in request.json:
-        return jsonify({"status": "Search type (busca) is required"}), 400
-        
-    busca = request.json['busca']
-    # Validar se busca é um dos valores permitidos
-    if busca not in ['game', 'user', 'ambos']:
-        return jsonify({"status": "Invalid search type. Must be 'game', 'user', or 'ambos'"}), 400
-    
-    # Verificar id_game conforme necessário
-    if busca in ['game', 'ambos']:
-        if 'id_game' not in request.json:
-            return jsonify({"status": "Game ID is required for this search type"}), 400
+    # Handle different request methods (GET vs POST)
+    if request.method == 'POST':
+        # Verificar se o corpo da requisição existe
+        if not request.is_json:
+            return jsonify({"status": "Request must be JSON"}), 400
             
-        try:
-            id_game = int(request.json['id_game'])
-            if id_game <= 0:
-                return jsonify({"status": "Game ID must be positive"}), 400
-        except ValueError:
-            return jsonify({"status": "Game ID must be an integer"}), 400
+        # Verificar campos obrigatórios
+        if 'busca' not in request.json:
+            return jsonify({"status": "Search type (busca) is required"}), 400
+            
+        busca = request.json['busca']
+        
+        # Validar se busca é um dos valores permitidos
+        if busca not in ['game', 'user', 'ambos']:
+            return jsonify({"status": "Invalid search type. Must be 'game', 'user', or 'ambos'"}), 400
+        
+        # Verificar id_game conforme necessário
+        if busca in ['game', 'ambos']:
+            if 'id_game' not in request.json:
+                return jsonify({"status": "Game ID is required for this search type"}), 400
+                
+            try:
+                id_game = int(request.json['id_game'])
+                if id_game < 0:  # Changed from <= 0 to < 0 to allow id_game=0 for home feed
+                    return jsonify({"status": "Game ID must be non-negative"}), 400
+            except ValueError:
+                return jsonify({"status": "Game ID must be an integer"}), 400
+        else:
+            id_game = None
     else:
-        id_game = None
+        # GET method - parameters come from query string
+        busca = request.args.get('busca')
+        if not busca:
+            return jsonify({"status": "Search type (busca) is required"}), 400
+            
+        if busca not in ['game', 'user', 'ambos']:
+            return jsonify({"status": "Invalid search type. Must be 'game', 'user', or 'ambos'"}), 400
+        
+        if busca in ['game', 'ambos']:
+            id_game_str = request.args.get('id_game')
+            if not id_game_str:
+                return jsonify({"status": "Game ID is required for this search type"}), 400
+                
+            try:
+                id_game = int(id_game_str)
+                if id_game < 0:  # Allow id_game=0 for home feed
+                    return jsonify({"status": "Game ID must be non-negative"}), 400
+            except ValueError:
+                return jsonify({"status": "Game ID must be an integer"}), 400
+        else:
+            id_game = None
     
     username = request.token_data['user']
     offset = (page - 1) * size
@@ -390,12 +415,20 @@ def ver():
             }
         }
         return jsonify(result), 200
-        
     elif busca == "ambos":
-        total_comments = Comments.query.filter_by(id_game=id_game, username=username).count()
-        comments = Comments.query.filter_by(id_game=id_game, username=username).order_by(
-            Comments.date_created.desc()
-        ).offset(offset).limit(size).all()
+        # For the home feed, we want to show all comments
+        if id_game and id_game > 0:
+            # If a specific game is requested
+            total_comments = Comments.query.filter_by(id_game=id_game, username=username).count()
+            comments = Comments.query.filter_by(id_game=id_game, username=username).order_by(
+                Comments.date_created.desc()
+            ).offset(offset).limit(size).all()
+        else:
+            # In case id_game is 0, return all comments for the home feed
+            total_comments = Comments.query.count()
+            comments = Comments.query.order_by(
+                Comments.date_created.desc()
+            ).offset(offset).limit(size).all()
         
         comment_dicts = [comment.to_dict() for comment in comments]
         result = {

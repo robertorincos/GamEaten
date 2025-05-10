@@ -202,11 +202,15 @@ export const getComments = async ({
   size?: number 
 }) => {
   try {
-    // Change to POST request with data in body
-    const response = await axiosInstance.post('/ver', 
-      { id_game, busca },
-      { params: { page, size } }
-    );
+    // Use GET request with query parameters instead of POST with body
+    const response = await axiosInstance.get('/ver', {
+      params: { 
+        page, 
+        size,
+        id_game,
+        busca
+      }
+    });
     return response.data;
   } catch (error) {
     console.error('API Error - getComments:', error);

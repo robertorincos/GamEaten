@@ -1,4 +1,4 @@
-import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
+import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase, List, ListItem, ListItemText, CircularProgress, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Autocomplete } from '@mui/material';
 import { useState, useEffect } from 'react';
 import GameFeed from '../../../contexts/components/GameFeed/GameFeed.tsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -13,10 +13,12 @@ import {
   faSignOutAlt,
   faGamepad,
   faUser,
-  faSpinner
+  faSpinner,
+  faPencilAlt,
+  faTimes
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth.ts';
-import { searchGame, searchGameSuggestions } from '../../../api/funcs.ts';
+import { searchGame, searchGameSuggestions, createComment, getComments } from '../../../api/funcs.ts';
 
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('following');
@@ -27,6 +29,16 @@ export const HomePage = () => {
   const [searchResults, setSearchResults] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // Review dialog state
+  const [openReviewDialog, setOpenReviewDialog] = useState(false);
+  const [reviewGameId, setReviewGameId] = useState<number | null>(null);
+  const [reviewGameName, setReviewGameName] = useState('');
+  const [reviewText, setReviewText] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [gameSearchResults, setGameSearchResults] = useState<Array<{id: number, name: string}>>([]);
+  const [gameSearchQuery, setGameSearchQuery] = useState('');
+  const [gameSearching, setGameSearching] = useState(false);
+  const [refreshFeed, setRefreshFeed] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -105,9 +117,86 @@ export const HomePage = () => {
     setShowSuggestions(false);
     window.location.href = `/game/${gameId}`;
   };
-
   const handleClickOutside = () => {
     setShowSuggestions(false);
+  };
+
+  // Review dialog handlers
+  const handleOpenReviewDialog = () => {
+    if (!isAuthenticated()) {
+      // Redirect to login if not authenticated
+      window.location.href = '/login';
+      return;
+    }
+    setOpenReviewDialog(true);
+  };
+
+  const handleCloseReviewDialog = () => {
+    setOpenReviewDialog(false);
+    setReviewGameId(null);
+    setReviewGameName('');
+    setReviewText('');
+    setGameSearchQuery('');
+    setGameSearchResults([]);
+  };
+
+  const handleGameSearchChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const query = event.target.value;
+    setGameSearchQuery(query);
+    
+    if (query.trim().length >= 2) {
+      setGameSearching(true);
+      try {
+        const results = await searchGameSuggestions({ query });
+        setGameSearchResults(results);
+      } catch (error) {
+        console.error('Error fetching game suggestions:', error);
+      } finally {
+        setGameSearching(false);
+      }
+    } else {
+      setGameSearchResults([]);
+    }
+  };
+
+  const handleGameSelect = (event: React.SyntheticEvent, value: { id: number; name: string } | null) => {
+    if (value) {
+      setReviewGameId(value.id);
+      setReviewGameName(value.name);
+    } else {
+      setReviewGameId(null);
+      setReviewGameName('');
+    }
+  };
+
+  const handleReviewTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setReviewText(event.target.value);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewGameId || !reviewText.trim() || !isAuthenticated()) {
+      return; // Don't submit if any required field is missing
+    }
+    
+    try {
+      setReviewSubmitting(true);
+      await createComment({
+        id_game: reviewGameId,
+        comment: reviewText
+      });
+      
+      // Close the dialog and refresh the feed
+      setRefreshFeed(prev => !prev);
+      handleCloseReviewDialog();
+      
+      // Show success message or toast notification
+      alert('Review published successfully!');
+    } catch (error) {
+      console.error('Error posting review:', error);
+      alert('Failed to post review. Please try again.');
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   return (
@@ -194,9 +283,31 @@ export const HomePage = () => {
             <span className="icon">
               <FontAwesomeIcon icon={faNewspaper} />
             </span>
-            Game News
-          </Box>
+            Game News          </Box>
         </Box>
+        
+        {/* Review Button - Similar to Twitter's Tweet button */}
+        <Button 
+          variant="contained" 
+          fullWidth 
+          onClick={handleOpenReviewDialog}
+          sx={{
+            mt: 3,
+            mb: 3,
+            py: 1.5,
+            borderRadius: '30px',
+            backgroundColor: '#1da1f2',
+            fontWeight: 'bold',
+            textTransform: 'none',
+            fontSize: '16px',
+            '&:hover': {
+              backgroundColor: '#1a91da'
+            }
+          }}
+        >
+          <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+          Review Game
+        </Button>
         
         {/* Trending Games (moved from right column) */}
         <Box sx={{ mt: 4 }}>
