@@ -44,6 +44,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
 import { getGameDetails, searchGame, searchGameSuggestions, createComment, getComments } from '../../api/funcs';
+import axios from 'axios';
 
 // Game interface based on API response
 interface Platform {
@@ -160,6 +161,8 @@ const Game = () => {
       try {
         setCommentLoading(true);
         const gameId = parseInt(id, 10);
+        
+        // Use the proper getComments function from funcs.ts
         const response = await getComments({
           id_game: gameId,
           busca: 'game',
@@ -172,6 +175,8 @@ const Game = () => {
         }
       } catch (error) {
         console.error('Error fetching comments:', error);
+        // Show empty comments rather than crashing
+        setComments([]);
       } finally {
         setCommentLoading(false);
       }
@@ -268,17 +273,37 @@ const Game = () => {
   // Format cover image URL
   const formatCoverUrl = (url?: string) => {
     if (!url) return 'https://via.placeholder.com/400x400?text=No+Cover';
-    // Handle URLs that might be missing http/https
-    if (url.startsWith('//')) url = 'https:' + url;
-    return url.replace('t_thumb', 't_cover_big');
+    
+    // Handle URLs that start with //
+    if (url.startsWith('//')) {
+      return `https:${url.replace('t_thumb', 't_cover_big')}`;
+    }
+    
+    // Handle URLs that already have http/https
+    if (url.startsWith('http')) {
+      return url.replace('t_thumb', 't_cover_big');
+    }
+    
+    // Handle relative URLs
+    return `https://images.igdb.com/igdb/image/upload/t_cover_big/${url.replace('t_thumb/', '')}`;
   };
 
   // Format artwork image URL
   const formatArtworkUrl = (url?: string) => {
     if (!url) return 'https://via.placeholder.com/800x400?text=No+Artwork';
-    // Handle URLs that might be missing http/https
-    if (url.startsWith('//')) url = 'https:' + url;
-    return url.replace('t_thumb', 't_original');
+    
+    // Handle URLs that start with //
+    if (url.startsWith('//')) {
+      return `https:${url.replace('t_thumb', 't_original')}`;
+    }
+    
+    // Handle URLs that already have http/https
+    if (url.startsWith('http')) {
+      return url.replace('t_thumb', 't_original');
+    }
+    
+    // Handle relative URLs
+    return `https://images.igdb.com/igdb/image/upload/t_original/${url.replace('t_thumb/', '')}`;
   };
 
   return (
@@ -640,39 +665,48 @@ const Game = () => {
             {/* Media Tab */}
             {activeTab === 1 && (
               <Box sx={{ p: 2 }}>
-                <Grid container spacing={2}>
-                  {gameDetails.artworks?.map((artwork) => (
-                    <Grid 
-                      key={artwork.id} 
-                      xs={12} 
-                      sm={6}
-                    >
-                      <img 
-                        src={formatArtworkUrl(artwork.url)}
-                        alt={`${gameDetails.name || 'Game'} artwork`}
-                        style={{ 
-                          width: '100%', 
-                          height: '300px',
-                          borderRadius: '8px',
-                          objectFit: 'cover',
-                          backgroundColor: '#172331'
+                {gameDetails.artworks && gameDetails.artworks.length > 0 ? (
+                  <Box sx={{ 
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 2
+                  }}>
+                    {gameDetails.artworks?.map((artwork) => (
+                      <Box 
+                        key={artwork.id}
+                        sx={{ 
+                          flex: '0 0 calc(50% - 8px)',
+                          '@media (max-width: 600px)': {
+                            flex: '0 0 100%'
+                          }
                         }}
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://via.placeholder.com/400x300?text=Image+Not+Available';
-                        }}
-                      />
-                    </Grid>
-                  ))}
-                  {(!gameDetails.artworks || gameDetails.artworks.length === 0) && (
-                    <Grid xs={12}>
-                      <Box sx={{ textAlign: 'center', py: 4, width: '100%' }}>
-                        <Typography variant="body1" sx={{ color: '#8899a6' }}>
-                          No media available for this game.
-                        </Typography>
+                      >
+                        <img 
+                          src={formatArtworkUrl(artwork.url)}
+                          alt={`${gameDetails.name || 'Game'} artwork`}
+                          style={{ 
+                            width: '100%', 
+                            height: '300px',
+                            borderRadius: '8px',
+                            objectFit: 'cover',
+                            backgroundColor: '#172331'
+                          }}
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.src = 'https://via.placeholder.com/400x300?text=Image+Not+Available';
+                            target.onerror = null;
+                          }}
+                        />
                       </Box>
-                    </Grid>
-                  )}
-                </Grid>
+                    ))}
+                  </Box>
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 4, width: '100%' }}>
+                    <Typography variant="body1" sx={{ color: '#8899a6' }}>
+                      No media available for this game.
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             )}
 

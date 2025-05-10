@@ -4,6 +4,7 @@ import { isAuthenticated } from './api/auth';
 import SignInSide from './pages/Login/Sign-In/SignInSide';
 import SignUp from './pages/Login/Sign-Up/SignUp';
 import HomePage from './pages/Home/Home-Page/HomePage';
+import Game from './pages/Game/Game';
 
 // Define props interface for ProtectedRoute
 interface ProtectedRouteProps {
@@ -26,6 +27,14 @@ function App() {
           element={
             <ProtectedRoute>
               <HomePage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/game/:id" 
+          element={
+            <ProtectedRoute>
+              <Game />
             </ProtectedRoute>
           } 
         />

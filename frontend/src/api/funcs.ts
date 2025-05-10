@@ -140,13 +140,15 @@ export const clearGameSearchCache = (): void => {
 /**
  * Get detailed game information by ID
  */
-export const getGameDetails = async (query: GameQuery): Promise<any> => {
-    try {
-        const response = await axiosInstance.get('/game', { data: query });
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
+export const getGameDetails = async ({ id }: { id: number }) => {
+  try {
+    // Change to POST request with data in body as required by the API
+    const response = await axiosInstance.post('/game', { id });
+    return response.data;
+  } catch (error) {
+    console.error('API Error - getGameDetails:', error);
+    throw error;
+  }
 };
 
 /**
@@ -188,22 +190,28 @@ export const deleteComment = async (commentId: number): Promise<any> => {
 /**
  * Get comments based on query parameters
  */
-export const getComments = async (params: CommentQueryParams): Promise<any> => {
-    try {
-        // For GET requests with a body, we should use a POST request with a custom header
-        const response = await axiosInstance.post('/ver', {
-            id_game: params.id_game,
-            busca: params.busca
-        }, {
-            params: {
-                page: params.page,
-                size: params.size
-            }
-        });
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
+export const getComments = async ({ 
+  id_game, 
+  busca, 
+  page = 1, 
+  size = 20 
+}: { 
+  id_game: number; 
+  busca: string; 
+  page?: number; 
+  size?: number 
+}) => {
+  try {
+    // Change to POST request with data in body
+    const response = await axiosInstance.post('/ver', 
+      { id_game, busca },
+      { params: { page, size } }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('API Error - getComments:', error);
+    throw error;
+  }
 };
 
 /**
