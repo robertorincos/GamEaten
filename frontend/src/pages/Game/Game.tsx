@@ -15,7 +15,6 @@ import {
   Tabs,
   Tab,
   Divider,
-  Grid as MuiGrid,
   Chip,
   Button,
   TextField
@@ -645,7 +644,6 @@ const Game = () => {
                   {gameDetails.artworks?.map((artwork) => (
                     <Grid 
                       key={artwork.id} 
-                      item 
                       xs={12} 
                       sm={6}
                     >
@@ -666,7 +664,7 @@ const Game = () => {
                     </Grid>
                   ))}
                   {(!gameDetails.artworks || gameDetails.artworks.length === 0) && (
-                    <Grid item xs={12}>
+                    <Grid xs={12}>
                       <Box sx={{ textAlign: 'center', py: 4, width: '100%' }}>
                         <Typography variant="body1" sx={{ color: '#8899a6' }}>
                           No media available for this game.
