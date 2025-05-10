@@ -99,11 +99,13 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
+  const [termsError, setTermsError] = useState(false);
 
   const validateInputs = () => {
     const email = document.getElementById('email') as HTMLInputElement;
     const password = document.getElementById('password') as HTMLInputElement;
     const name = document.getElementById('name') as HTMLInputElement;
+    const termsAgreed = document.querySelector('input[name="termsAgreed"]') as HTMLInputElement;
 
     let isValid = true;
 
@@ -132,6 +134,15 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
     } else {
       setNameError(false);
       setNameErrorMessage('');
+    }
+
+    if (!termsAgreed || !termsAgreed.checked) {
+      setTermsError(true);
+      setSubmitError('You must agree to the Terms of Service to create an account.');
+      isValid = false;
+    } else {
+      setTermsError(false);
+      setSubmitError('');
     }
 
     return isValid;
@@ -261,6 +272,23 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
             <FormControlLabel
               control={<Checkbox value="allowExtraEmails" color="primary" />}
               label="I want to receive updates via email."
+            />
+            <FormControlLabel
+              required
+              control={
+                <Checkbox 
+                  name="termsAgreed" 
+                  color={termsError ? "error" : "primary"} 
+                />
+              }
+              label={
+                <Typography variant="body2" color={termsError ? "error" : "textPrimary"}>
+                  I agree to the <Link href="https://drive.google.com/file/d/1vS9Gdv9sIFGz9pcD2MRoh1043Kz2kB5b/view?usp=sharing" 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Terms of Service</Link> and Privacy Policy
+                </Typography>
+              }
             />
             <Button
               type="submit"
