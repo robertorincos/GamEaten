@@ -370,7 +370,7 @@ const Game = () => {
         >
           <Box 
             className="nav-item"
-            onClick={() => window.location.href = '/'}
+            onClick={() => window.location.href = '/home'}
             sx={{ cursor: 'pointer' }}
           >
             <span className="icon">
