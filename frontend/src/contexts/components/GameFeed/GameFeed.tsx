@@ -45,28 +45,59 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
         setComments(response.comments);
         
         // Fetch game details for each unique game ID
-        const uniqueGameIds: number[] = [...new Set<number>(response.comments.map((comment: Comment) => comment.id_game))];
-        await Promise.all(
-          uniqueGameIds.map(async (gameId: number) => {
-            if (!gameInfoCache[gameId]) {
-              try {
-                const gameData = await getGameDetails({ id: gameId });
-                if (gameData) {
-                  setGameInfoCache(prev => ({
-                    ...prev,
-                    [gameId]: {
-                      id: gameId,
-                      name: gameData.name || 'Unknown Game',
-                      cover: gameData.cover || undefined
-                    }
-                  }));
+        const uniqueGameIds = [...new Set(response.comments.map((comment: { id_game: any; }) => comment.id_game))];
+        
+        // Create a batch of promises for all game detail requests
+        const gameDetailPromises = uniqueGameIds.map(async (gameId) => {
+          if (!gameInfoCache[gameId as number]) {
+            try {
+              const gameData = await getGameDetails({ id: gameId as number });
+              
+              // Check if we received valid game data
+              if (gameData && gameData.length > 0 && gameData[0]) {
+                const game = gameData[0];
+                
+                // Process cover image URL if it exists
+                let coverUrl = undefined;
+                if (game.cover && game.cover.url) {
+                  // Convert from thumbnail to larger image if needed
+                  coverUrl = game.cover.url.replace('t_thumb', 't_cover_big');
+                  
+                  // Ensure URL starts with https
+                  if (!coverUrl.startsWith('https:')) {
+                    coverUrl = 'https:' + coverUrl;
+                  }
                 }
-              } catch (err) {
-                console.error(`Failed to fetch details for game ${gameId}:`, err);
+                
+                return {
+                  id: gameId as number, // Cast to number explicitly
+                  data: {
+                    id: gameId as number, // Cast to number explicitly
+                    name: game.name || 'Unknown Game',
+                    cover: coverUrl
+                  }
+                };
               }
+            } catch (err) {
+              console.error(`Failed to fetch details for game ${gameId}:`, err);
             }
-          })
-        );
+          }
+          return null;
+        });
+        
+        // Wait for all game detail requests to complete
+        const gameResults = await Promise.all(gameDetailPromises);
+        
+        // Update the cache with all fetched game data
+        const newCache = { ...gameInfoCache };
+        gameResults.forEach(result => {
+          if (result && result.data) {
+            // Cast the ID to number when using as an index
+            newCache[result.id as number] = result.data;
+          }
+        });
+        
+        setGameInfoCache(newCache);
       }
     } catch (err) {
       console.error('Failed to fetch comments:', err);

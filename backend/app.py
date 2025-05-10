@@ -40,10 +40,15 @@ class Comments(db.Model):
         return f'<Comment {self.id}>'
 
     def to_dict(self):
+        # Get the actual username from the User model
+        user = User.query.filter_by(id=self.username).first()
+        display_username = user.username if user else f"User {self.username}"
+        
         return {
             "id": self.id, 
             "id_game": self.id_game, 
-            "username": self.username, 
+            "user_id": self.username,  # Keep the original ID for reference
+            "username": display_username,  # Add the actual username
             "comment": self.Comment, 
             "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S')
         }
