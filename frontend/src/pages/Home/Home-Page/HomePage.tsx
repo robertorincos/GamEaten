@@ -547,6 +547,71 @@ export const HomePage = () => {
           </Box>
         </Box>
       </Box>
+
+      {/* Review Dialog */}
+      <Dialog 
+        open={openReviewDialog} 
+        onClose={handleCloseReviewDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Create Game Review</DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Autocomplete
+            options={gameSearchResults}
+            getOptionLabel={(option) => option.name}
+            loading={gameSearching}
+            onChange={handleGameSelect}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Search for a game"
+                variant="outlined"
+                fullWidth
+                onChange={handleGameSearchChange}
+                value={gameSearchQuery}
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {gameSearching ? <CircularProgress color="inherit" size={20} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
+          
+          {reviewGameName && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2">Selected game:</Typography>
+              <Typography variant="body1">{reviewGameName}</Typography>
+            </Box>
+          )}
+          
+          <TextField
+            label="Write your review"
+            multiline
+            rows={4}
+            fullWidth
+            variant="outlined"
+            value={reviewText}
+            onChange={handleReviewTextChange}
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseReviewDialog}>Cancel</Button>
+          <Button 
+            onClick={handleSubmitReview} 
+            variant="contained" 
+            disabled={!reviewGameId || !reviewText.trim() || reviewSubmitting}
+          >
+            {reviewSubmitting ? <CircularProgress size={24} /> : 'Post Review'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
