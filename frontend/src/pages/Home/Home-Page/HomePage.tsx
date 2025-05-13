@@ -1,5 +1,5 @@
 import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase, List, ListItem, ListItemText, CircularProgress, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Autocomplete } from '@mui/material';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import GameFeed from '../../../contexts/components/GameFeed/GameFeed.tsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -29,6 +29,7 @@ export const HomePage = () => {
   const [searchResults, setSearchResults] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchTimeoutRef = useRef<number | null>(null);
   // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
   const [reviewGameId, setReviewGameId] = useState<number | null>(null);
@@ -96,20 +97,30 @@ export const HomePage = () => {
     const query = e.target.value;
     setSearchQuery(query);
     
+    // Clear any existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
     if (query.trim().length >= 2) {
       setSearchLoading(true);
-      try {
-        const results = await searchGameSuggestions({ query });
-        setSuggestions(results);
-        setShowSuggestions(true);
-      } catch (error) {
-        console.error('Error fetching suggestions:', error);
-      } finally {
-        setSearchLoading(false);
-      }
+      
+      // Set a new timeout with 500ms delay (0.5 seconds)
+      searchTimeoutRef.current = window.setTimeout(async () => {
+        try {
+          const results = await searchGameSuggestions({ query });
+          setSuggestions(results);
+          setShowSuggestions(true);
+        } catch (error) {
+          console.error('Error fetching suggestions:', error);
+        } finally {
+          setSearchLoading(false);
+        }
+      }, 500);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
+      setSearchLoading(false);
     }
   };
 
@@ -120,6 +131,15 @@ export const HomePage = () => {
   const handleClickOutside = () => {
     setShowSuggestions(false);
   };
+
+  // Clean up timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Review dialog handlers
   const handleOpenReviewDialog = () => {
