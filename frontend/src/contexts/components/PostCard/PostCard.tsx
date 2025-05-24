@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, IconButton, Typography, Box, Avatar, Div
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faHeart, faComment, faShare, faEllipsisH, faGamepad } from '@fortawesome/free-solid-svg-icons';
 import { useState } from 'react';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { parseISO, formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
   id: number;
@@ -14,10 +14,10 @@ interface PostCardProps {
   gameImage?: string;
 }
 
-const PostCard = ({ id, username, text, date, gameId, gameName, gameImage }: PostCardProps) => {
+const PostCard = ({ username, text, date, gameId, gameName, gameImage }: PostCardProps) => {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(Math.floor(Math.random() * 50)); // Random placeholder
-  const [commentCount, setCommentCount] = useState(Math.floor(Math.random() * 10)); // Random placeholder
+  const [commentCount] = useState(Math.floor(Math.random() * 10)); // Random placeholder
   
   // Format date
   const formatDate = (dateString: string) => {

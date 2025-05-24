@@ -14,11 +14,14 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
-load_dotenv()
+
+# Only load .env file if not in production (when FLASK_ENV is not 'production')
+if os.getenv('FLASK_ENV') != 'production':
+    load_dotenv()
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'{os.getenv("DB_URI")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.getenv('secret')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.getenv('secret'))  # Fallback to 'secret' for backward compatibility
 db = SQLAlchemy(app)
 
 class User(db.Model):
@@ -491,8 +494,8 @@ def suggestions():
         return jsonify([]), 500
 
 # Create all tables
-#with app.app_context():
-#    db.create_all()
+with app.app_context():
+    db.create_all()
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0', port=5000, debug=False)

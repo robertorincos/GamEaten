@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate as useReactRouterNavigate, Link as RouterLink, BrowserRouter } from 'react-router-dom';
+import { useNavigate as useReactRouterNavigate, BrowserRouter } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -19,8 +19,8 @@ import { styled } from '@mui/material/styles';
 import AppTheme from '../../shared-theme/AppTheme';
 import ColorModeSelect from '../../shared-theme/ColorModeSelect';
 import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../../../contexts/components/CustomIcons/CustomIcons';
-import { register } from '../../../api/auth';
 import { useState } from 'react';
+import { register } from '../../../api/auth';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -70,25 +70,24 @@ const SignUpContainer = styled(Container)(({ theme }) => ({
 }));
 
 // Add this custom hook to safely handle navigation both inside and outside Router context
-function useCustomNavigate() {
+//function useCustomNavigate() {
   // Try to use React Router's navigate, but don't throw if we're outside Router context
-  let navigate;
-  try {
-    navigate = useReactRouterNavigate();
-    return navigate;
-  } catch (e) {
+//  let navigate;
+//  try {
+//    navigate = useReactRouterNavigate();
+//    return navigate;
+//  } catch (e) {
     // If we're outside Router context, return a function that logs the navigation
-    return (path: string) => {
-      console.log(`Would navigate to ${path}`);
+//    return (path: string) => {
+//      console.log(`Would navigate to ${path}`);
       // You could also use window.location.href = path; for actual navigation
       // window.location.href = path;
-    };
-  }
-}
+//    };
+//  }
+//}
 
 export default function SignUp(props: { disableCustomTheme?: boolean }) {
   // Replace navigate with our custom hook
-  const navigate = useCustomNavigate();
   
   const [emailError, setEmailError] = React.useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
@@ -163,7 +162,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
     const data = new FormData(event.currentTarget);
     
     try {
-      const response = await register({
+      await register({
         user: data.get('name') as string,
         email: data.get('email') as string,
         pass: data.get('password') as string

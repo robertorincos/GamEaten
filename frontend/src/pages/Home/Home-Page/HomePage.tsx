@@ -15,10 +15,9 @@ import {
   faUser,
   faSpinner,
   faPencilAlt,
-  faTimes
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth.ts';
-import { searchGame, searchGameSuggestions, createComment, getComments } from '../../../api/funcs.ts';
+import { searchGame, searchGameSuggestions, createComment } from '../../../api/funcs.ts';
 
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('following');
@@ -26,7 +25,7 @@ export const HomePage = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<number | null>(null);
+  const [, setSearchResults] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
@@ -189,7 +188,7 @@ export const HomePage = () => {
     }
   };
 
-  const handleGameSelect = (event: React.SyntheticEvent, value: { id: number; name: string } | null) => {
+  const handleGameSelect = (_event: React.SyntheticEvent, value: { id: number; name: string } | null) => {
     if (value) {
       setReviewGameId(value.id);
       setReviewGameName(value.name);

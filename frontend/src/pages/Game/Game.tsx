@@ -14,12 +14,10 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  Divider,
   Chip,
   Button,
   TextField
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
@@ -35,7 +33,6 @@ import {
   faSpinner,
   faComment,
   faHeart,
-  faRetweet,
   faShare,
   faStar,
   faCalendarAlt,
@@ -44,7 +41,6 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
 import { getGameDetails, searchGame, searchGameSuggestions, createComment, getComments } from '../../api/funcs';
-import axios from 'axios';
 
 // Game interface based on API response
 interface Platform {
@@ -90,15 +86,15 @@ interface Comment {
   date_created: string;
 }
 
-interface CommentsResponse {
-  comments: Comment[];
-  pagination: {
-    total: number;
-    pages: number;
-    current_page: number;
-    per_page: number;
-  };
-}
+//interface CommentsResponse {
+//  comments: Comment[];
+//  pagination: {
+//    total: number;
+//    pages: number;
+//    current_page: number;
+//   per_page: number;
+//  };
+//}
 
 const Game = () => {
   const { id } = useParams<{ id: string }>();
@@ -193,7 +189,7 @@ const Game = () => {
     fetchComments();
   }, [id]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
