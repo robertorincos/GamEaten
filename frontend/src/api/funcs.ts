@@ -65,7 +65,7 @@ export const searchGame = async (searchQuery: GameSearchQuery): Promise<number> 
         }
         
         // If not in cache or expired, make API call
-        const response = await axiosInstance.post<number>('/search', searchQuery);
+        const response = await axiosInstance.post<number>('/api/search', searchQuery);
         
         if (typeof response.data === 'number') {
             // Update cache with the result
@@ -108,7 +108,7 @@ export const searchGameSuggestions = async (searchQuery: GameSearchQuery): Promi
         }
         
         // If not in cache or expired, make API call
-        const response = await axiosInstance.post<GameSearchSuggestionsResponse[]>('/suggestions', searchQuery);
+        const response = await axiosInstance.post<GameSearchSuggestionsResponse[]>('/api/suggestions', searchQuery);
         
         if (Array.isArray(response.data)) {
             // Store first result in cache if available
@@ -143,7 +143,7 @@ export const clearGameSearchCache = (): void => {
 export const getGameDetails = async ({ id }: { id: number }) => {
   try {
     // Change to POST request with data in body as required by the API
-    const response = await axiosInstance.post('/game', { id });
+    const response = await axiosInstance.post('/api/game', { id });
     return response.data;
   } catch (error) {
     console.error('API Error - getGameDetails:', error);
@@ -156,7 +156,7 @@ export const getGameDetails = async ({ id }: { id: number }) => {
  */
 export const createComment = async (commentData: CommentData): Promise<any> => {
     try {
-        const response = await axiosInstance.post('/comment', commentData);
+        const response = await axiosInstance.post('/api/comment', commentData);
         return response.data;
     } catch (error) {
         throw error;
@@ -168,7 +168,7 @@ export const createComment = async (commentData: CommentData): Promise<any> => {
  */
 export const updateComment = async (commentId: number, data: CommentUpdateData): Promise<any> => {
     try {
-        const response = await axiosInstance.put(`/comment/${commentId}`, data);
+        const response = await axiosInstance.put(`/api/comment/${commentId}`, data);
         return response.data;
     } catch (error) {
         throw error;
@@ -180,7 +180,7 @@ export const updateComment = async (commentId: number, data: CommentUpdateData):
  */
 export const deleteComment = async (commentId: number): Promise<any> => {
     try {
-        const response = await axiosInstance.delete(`/comment/${commentId}`);
+        const response = await axiosInstance.delete(`/api/comment/${commentId}`);
         return response.data;
     } catch (error) {
         throw error;
@@ -203,7 +203,7 @@ export const getComments = async ({
 }) => {
   try {
     // Use GET request with query parameters instead of POST with body
-    const response = await axiosInstance.get('/ver', {
+    const response = await axiosInstance.get('/api/ver', {
       params: { 
         page, 
         size,
@@ -223,7 +223,7 @@ export const getComments = async ({
  */
 export const checkAuth = async (): Promise<any> => {
     try {
-        const response = await axiosInstance.get('/auth');
+        const response = await axiosInstance.get('/api/auth');
         return response.data;
     } catch (error) {
         throw error;

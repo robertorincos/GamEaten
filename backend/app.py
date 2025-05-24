@@ -53,7 +53,7 @@ class Comments(db.Model):
             "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S')
         }
 
-@app.route('/search', methods=['POST'])
+@app.route('/api/search', methods=['POST'])
 def search():
     if not request.is_json:
         return jsonify({"status": "Request must be JSON"}), 400
@@ -87,7 +87,7 @@ def search():
     except Exception as e:
         return jsonify({"status": f"An error occurred: {str(e)}"}), 500
 
-@app.route('/game', methods=['GET', 'POST'])
+@app.route('/api/game', methods=['GET', 'POST'])
 def game():
     try:
         # Get the ID value from the request (JSON body for POST or query params for GET)
@@ -138,7 +138,7 @@ def game():
         print(f"Error in /game route: {str(e)}")
         return jsonify({"status": "An error occurred processing your request"}), 500
 
-@app.route('/register', methods=['POST'])
+@app.route('/api/register', methods=['POST'])
 def register():
     info = request.json
     password = request.json['pass']
@@ -170,7 +170,7 @@ def register():
     else:
         return jsonify({"status": "Password must be at least 8 characters long"}), 400
 
-@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def login():
     password = request.json['pass']
     email = request.json['email']
@@ -200,7 +200,7 @@ def login():
     else:
         return jsonify({'status': 'email not found'}), 404
 
-@app.route('/change-password', methods=['POST'])
+@app.route('/api/change-password', methods=['POST'])
 @token_required
 def change_password():
 
@@ -228,7 +228,7 @@ def change_password():
     
     return jsonify({'status': 'password changed'}), 200 
 
-@app.route('/user', methods=['POST'])
+@app.route('/api/user', methods=['POST'])
 @token_required
 def user():
     id = request.token_data['user']
@@ -250,7 +250,7 @@ def user():
 #     db.session.commit()
 #     return {'status': 'comentario criado'}, 200
 
-@app.route('/comment/<int:id>', methods=['PUT'])
+@app.route('/api/comment/<int:id>', methods=['PUT'])
 @token_required
 def edit(id):
     user_id = request.token_data['user']
@@ -262,7 +262,7 @@ def edit(id):
     return {"status":"comentario atualizado"}, 200
 
 # remover um comentario feito por voce
-@app.route('/comment/<int:id>', methods=['DELETE'])
+@app.route('/api/comment/<int:id>', methods=['DELETE'])
 @token_required
 def delete(id):
     #apenas o criador deletar
@@ -272,7 +272,7 @@ def delete(id):
     return {"status":"comentario deletado"}, 200
 
 
-@app.route('/comment', methods=['POST'])
+@app.route('/api/comment', methods=['POST'])
 @token_required
 def comment():
     if not request.is_json:
@@ -314,7 +314,7 @@ def comment():
         db.session.rollback()
         return jsonify({"status": f"Error creating comment: {str(e)}"}), 500
 
-@app.route('/ver', methods = ['GET', 'POST'])
+@app.route('/api/ver', methods = ['GET', 'POST'])
 @token_required
 def ver():
     # Validar e converter parâmetros da query
@@ -449,7 +449,7 @@ def ver():
     else:
         return jsonify({"status": "invalid request"}), 400
 
-@app.route('/suggestions', methods=['POST'])
+@app.route('/api/suggestions', methods=['POST'])
 def suggestions():
     if not request.is_json:
         return jsonify({"status": "Request must be JSON"}), 400

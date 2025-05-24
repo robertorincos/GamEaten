@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create a base axios instance
 const axiosInstance = axios.create({
-    baseURL: 'http://localhost:5000', // Flask default address
+    baseURL: '/', // Flask default address
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json',

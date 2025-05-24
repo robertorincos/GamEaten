@@ -30,7 +30,7 @@ export interface PasswordChangeData {
  */
 export const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
     try {
-        const response = await axiosInstance.post<AuthResponse>('/login', credentials);
+        const response = await axiosInstance.post<AuthResponse>('/api/login', credentials);
         
         if (response.data.token) {
             // Store the token in localStorage
@@ -59,7 +59,7 @@ export const logout = (): void => {
  */
 export const getCurrentUser = async (): Promise<UserResponse> => {
     try {
-        const response = await axiosInstance.post<UserResponse>('/user');
+        const response = await axiosInstance.post<UserResponse>('/api/user');
         return response.data;
     } catch (error) {
         throw error;
@@ -71,7 +71,7 @@ export const getCurrentUser = async (): Promise<UserResponse> => {
  */
 export const changePassword = async (data: PasswordChangeData): Promise<any> => {
     try {
-        const response = await axiosInstance.post('/change-password', data);
+        const response = await axiosInstance.post('/api/change-password', data);
         return response.data;
     } catch (error) {
         throw error;
@@ -88,7 +88,7 @@ export const isAuthenticated = (): boolean => {
 
 export const register = async (userData: RegisterData): Promise<any> => {
     try {
-        const response = await axiosInstance.post('/register', userData, {
+        const response = await axiosInstance.post('/api/register', userData, {
             headers: {
                 'Content-Type': 'application/json'
             }
