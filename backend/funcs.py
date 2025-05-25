@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from functools import wraps
 import jwt
+from urllib.parse import urlparse
 
 load_dotenv()
 
@@ -74,3 +75,50 @@ def token_required(func):
         
         return func(*args, **kwargs)
     return decorated
+
+def is_valid_gif_url(url):
+    """
+    Validate if a URL is a valid GIF URL
+    Supports Giphy, Tenor, and direct GIF URLs
+    """
+    if not url or not isinstance(url, str):
+        return False
+    
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        
+        # Check for HTTPS
+        if parsed.scheme != 'https':
+            return False
+        
+        # Allow Giphy URLs
+        if 'giphy.com' in parsed.netloc or 'gph.is' in parsed.netloc:
+            return True
+        
+        # Allow Tenor URLs
+        if 'tenor.com' in parsed.netloc or 'tenorapi.com' in parsed.netloc:
+            return True
+        
+        # Allow direct GIF URLs from trusted domains
+        trusted_domains = [
+            'media.giphy.com',
+            'i.giphy.com',
+            'media.tenor.com',
+            'c.tenor.com',
+            'media1.tenor.com',
+            'media2.tenor.com',
+            'media3.tenor.com',
+            'i.imgur.com'
+        ]
+        
+        if any(domain in parsed.netloc for domain in trusted_domains):
+            # Check if it ends with .gif or has gif in the path
+            if url.lower().endswith('.gif') or 'gif' in url.lower():
+                return True
+        
+        return False
+        
+    except Exception:
+        return False

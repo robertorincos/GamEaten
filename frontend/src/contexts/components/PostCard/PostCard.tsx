@@ -11,10 +11,11 @@ interface PostCardProps {
   date: string;
   gameId: number;
   gameName: string;
-  gameImage?: string;
+  gifUrl?: string;
+  commentType?: 'text' | 'gif' | 'mixed';
 }
 
-const PostCard = ({ username, text, date, gameId, gameName, gameImage }: PostCardProps) => {
+const PostCard = ({ username, text, date, gameId, gameName, gifUrl }: PostCardProps) => {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(Math.floor(Math.random() * 50)); // Random placeholder
   const [commentCount] = useState(Math.floor(Math.random() * 10)); // Random placeholder
@@ -89,26 +90,44 @@ const PostCard = ({ username, text, date, gameId, gameName, gameImage }: PostCar
           '& .MuiCardHeader-title': { display: 'block' },
           '& .MuiCardHeader-subheader': { color: '#8899a6' }
         }}
-      />
-      <CardContent sx={{ pt: 0 }}>
-        <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
-          {text}
-        </Typography>
+      />      <CardContent sx={{ pt: 0 }}>
+        {/* Display text content if available */}
+        {text && (
+          <Typography variant="body1" sx={{ mb: gifUrl ? 2 : 2, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
+            {text}
+          </Typography>
+        )}
         
-        {gameImage && (
-          <Box 
-            sx={{ 
-              height: '200px', 
-              backgroundColor: '#1e2c3c', 
-              borderRadius: '16px', 
-              mb: 2,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundImage: `url(${gameImage})`,
-              cursor: 'pointer'
-            }}
-            onClick={handleGoToGame}
-          />
+        {/* Display GIF if available */}
+        {gifUrl && (
+          <Box sx={{ mb: 2 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                backgroundColor: '#1e2c3c',
+                borderRadius: '16px',
+                p: 1,
+                cursor: 'pointer'
+              }}
+              onClick={handleGoToGame}
+            >
+              <img
+                src={gifUrl}
+                alt={text || 'GIF Review'}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '300px',
+                  borderRadius: '12px',
+                  objectFit: 'contain'
+                }}
+                onError={(e) => {
+                  // Hide broken GIF images
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </Box>
+          </Box>
         )}
         
         <Divider sx={{ borderColor: '#1e2c3c', my: 1 }} />

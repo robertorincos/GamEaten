@@ -37,10 +37,12 @@ import {
   faStar,
   faCalendarAlt,
   faDesktop,
-  faBookmark
+  faBookmark,
+  faPencilAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
 import { getGameDetails, searchGame, searchGameSuggestions, createComment, getComments } from '../../api/funcs';
+import ReviewDialog from '../../contexts/components/Review/review';
 
 // Game interface based on API response
 interface Platform {
@@ -84,6 +86,9 @@ interface Comment {
   username: string;
   comment: string;
   date_created: string;
+  gif_url?: string;
+  has_text: boolean;
+  has_gif: boolean;
 }
 
 //interface CommentsResponse {
@@ -109,6 +114,10 @@ const Game = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // Review dialog state
+  const [openReviewDialog, setOpenReviewDialog] = useState(false);
+
   // Fetch game details
   useEffect(() => {
     const fetchGameDetails = async () => {
@@ -273,6 +282,15 @@ const Game = () => {
       console.error('Error posting comment:', error);
     }
   };
+  // Review dialog handlers
+  const handleOpenReviewDialog = () => {
+    if (!isAuthenticated()) {
+      // Redirect to login if not authenticated
+      window.location.href = '/login';
+      return;
+    }
+    setOpenReviewDialog(true);
+  };
 
   // Format cover image URL
   const formatCoverUrl = (url?: string) => {
@@ -408,6 +426,29 @@ const Game = () => {
             Profile
           </Box>
         </Box>
+        
+        {/* Review Button - Similar to Twitter's Tweet button */}
+        <Button 
+          variant="contained" 
+          fullWidth 
+          onClick={handleOpenReviewDialog}
+          sx={{
+            mt: 3,
+            mb: 3,
+            py: 1.5,
+            borderRadius: '30px',
+            backgroundColor: '#1da1f2',
+            fontWeight: 'bold',
+            textTransform: 'none',
+            fontSize: '16px',
+            '&:hover': {
+              backgroundColor: '#1a91da'
+            }
+          }}
+        >
+          <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+          Review Game
+        </Button>
       </Box>
 
       {/* Middle Column - Game Content */}
@@ -636,11 +677,45 @@ const Game = () => {
                             </Typography>
                             <Typography variant="body2" sx={{ color: '#8899a6' }}>
                               {new Date(comment.date_created).toLocaleDateString()}
+                            </Typography>                          </Box>
+                          {/* Display comment text if available */}
+                          {comment.comment && (
+                            <Typography variant="body1" sx={{ mt: 1, mb: comment.gif_url ? 2 : 1 }}>
+                              {comment.comment}
                             </Typography>
-                          </Box>
-                          <Typography variant="body1" sx={{ mt: 1 }}>
-                            {comment.comment}
-                          </Typography>
+                          )}
+                          
+                          {/* Display GIF if available */}
+                          {comment.gif_url && (
+                            <Box 
+                              sx={{ 
+                                mt: 1, 
+                                mb: 1,
+                                display: 'flex',
+                                justifyContent: 'center',
+                                backgroundColor: '#1e2c3c',
+                                borderRadius: '12px',
+                                p: 1,
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => {/* GIF click handler - maybe zoom in */}}
+                            >
+                              <img
+                                src={comment.gif_url}
+                                alt="Comment GIF"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '200px',
+                                  borderRadius: '8px',
+                                  objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            </Box>
+                          )}
+                          
                           <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
                             <IconButton size="small" sx={{ color: '#8899a6' }}>
                               <FontAwesomeIcon icon={faComment} />
@@ -952,7 +1027,28 @@ const Game = () => {
             ))}
           </Box>
         </Box>
-      </Box>
+      </Box>      {/* Review Dialog */}
+      <ReviewDialog 
+        open={openReviewDialog} 
+        onClose={() => setOpenReviewDialog(false)}
+        onReviewSubmitted={async () => {
+          setOpenReviewDialog(false);
+          
+          // Refresh comments after review
+          if (gameDetails?.id) {
+            const response = await getComments({
+              id_game: gameDetails.id,
+              busca: 'game',
+              page: 1,
+              size: 20
+            });
+            
+            if (response && response.comments) {
+              setComments(response.comments);
+            }
+          }
+        }}
+      />
     </Box>
   );
 };

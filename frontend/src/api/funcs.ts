@@ -22,9 +22,62 @@ export interface GameQuery {
     id: number;
 }
 
+export interface GifSearchQuery {
+    query: string;
+    limit?: number;
+    offset?: number;
+    rating?: 'y' | 'g' | 'pg' | 'pg-13' | 'r';
+}
+
+export interface GifData {
+    id: string;
+    title: string;
+    url: string;
+    images: {
+        original: {
+            url: string;
+            width: string;
+            height: string;
+            size?: string;
+        };
+        preview: {
+            url: string;
+            width: string;
+            height: string;
+        };
+        fixed_height: {
+            url: string;
+            width: string;
+            height: string;
+        };
+        fixed_width: {
+            url: string;
+            width: string;
+            height: string;
+        };
+        downsized: {
+            url: string;
+            width: string;
+            height: string;
+        };
+    };
+}
+
+export interface GifSearchResponse {
+    gifs: GifData[];
+    pagination: {
+        total_count: number;
+        count: number;
+        offset: number;
+    };
+    query: string;
+}
+
 export interface CommentData {
     id_game: number;
-    comment: string;
+    comment?: string;
+    gif_url?: string;
+    comment_type?: 'text' | 'gif' | 'mixed';
 }
 
 export interface CommentUpdateData {
@@ -228,4 +281,47 @@ export const checkAuth = async (): Promise<any> => {
     } catch (error) {
         throw error;
     }
+};
+
+/**
+ * Search for GIFs using Giphy API
+ */
+export const searchGifs = async (data: GifSearchQuery): Promise<GifSearchResponse> => {
+  try {
+    const response = await axiosInstance.post('/api/gifs/search', data);
+    return response.data;
+  } catch (error) {
+    console.error('API Error - searchGifs:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get trending GIFs
+ */
+export const getTrendingGifs = async (params?: {
+  limit?: number;
+  offset?: number;
+  rating?: string;
+}): Promise<GifSearchResponse> => {
+  try {
+    const response = await axiosInstance.get('/api/gifs/trending', { params });
+    return response.data;
+  } catch (error) {
+    console.error('API Error - getTrendingGifs:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get GIF categories
+ */
+export const getGifCategories = async (): Promise<any> => {
+  try {
+    const response = await axiosInstance.get('/api/gifs/categories');
+    return response.data;
+  } catch (error) {
+    console.error('API Error - getGifCategories:', error);
+    throw error;
+  }
 };

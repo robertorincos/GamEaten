@@ -9,7 +9,7 @@ import {
   InputBase, 
   List, 
   ListItem, 
-    ListItemText, 
+  ListItemText, 
   CircularProgress,
   Tabs,
   Tab,
@@ -33,9 +33,11 @@ import {
   faShare,
   faCalendarAlt,
   faEdit,
+  faPencilAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth';
 import { searchGame, searchGameSuggestions, getComments } from '../../../api/funcs';
+import ReviewDialog from '../../../contexts/components/Review/review';
 
 interface Comment {
   id: number;
@@ -43,6 +45,9 @@ interface Comment {
   username: string;
   comment: string;
   date_created: string;
+  gif_url?: string;
+  has_text: boolean;
+  has_gif: boolean;
 }
 
 interface UserStats {
@@ -70,6 +75,9 @@ const ProfilePage = () => {
     following: 48,
     joinDate: '2024'
   });
+
+  // Review dialog state
+  const [openReviewDialog, setOpenReviewDialog] = useState(false);
 
   // Fetch user data and comments
   useEffect(() => {
@@ -170,6 +178,20 @@ const ProfilePage = () => {
 
   const handleClickOutside = () => {
     setShowSuggestions(false);
+  };
+
+  // Review dialog handlers
+  const handleOpenReviewDialog = () => {
+    if (!isAuthenticated()) {
+      // Redirect to login if not authenticated
+      window.location.href = '/login';
+      return;
+    }
+    setOpenReviewDialog(true);
+  };
+
+  const handleCloseReviewDialog = () => {
+    setOpenReviewDialog(false);
   };
 
   const formatDate = (dateString: string) => {
@@ -277,6 +299,29 @@ const ProfilePage = () => {
             Profile
           </Box>
         </Box>
+        
+        {/* Review Button - Similar to Twitter's Tweet button */}
+        <Button 
+          variant="contained" 
+          fullWidth 
+          onClick={handleOpenReviewDialog}
+          sx={{
+            mt: 3,
+            mb: 3,
+            py: 1.5,
+            borderRadius: '30px',
+            backgroundColor: '#1da1f2',
+            fontWeight: 'bold',
+            textTransform: 'none',
+            fontSize: '16px',
+            '&:hover': {
+              backgroundColor: '#1a91da'
+            }
+          }}
+        >
+          <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+          Review Game
+        </Button>
       </Box>
 
       {/* Middle Column - Profile Content */}
@@ -441,13 +486,47 @@ const ProfilePage = () => {
                             <Typography variant="body2" sx={{ color: '#8899a6' }}>
                               {formatDate(comment.date_created)}
                             </Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ color: '#8899a6', mb: 1 }}>
+                          </Box>                          <Typography variant="body2" sx={{ color: '#8899a6', mb: 1 }}>
                             Game ID: {comment.id_game}
                           </Typography>
-                          <Typography variant="body1" sx={{ mt: 1 }}>
-                            {comment.comment}
-                          </Typography>
+                          
+                          {/* Display comment text if available */}
+                          {comment.comment && (
+                            <Typography variant="body1" sx={{ mt: 1, mb: comment.gif_url ? 2 : 1 }}>
+                              {comment.comment}
+                            </Typography>
+                          )}
+                          
+                          {/* Display GIF if available */}
+                          {comment.gif_url && (
+                            <Box 
+                              sx={{ 
+                                mt: 1, 
+                                mb: 1,
+                                display: 'flex',
+                                justifyContent: 'center',
+                                backgroundColor: '#1e2c3c',
+                                borderRadius: '12px',
+                                p: 1,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <img
+                                src={comment.gif_url}
+                                alt="Review GIF"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '200px',
+                                  borderRadius: '8px',
+                                  objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            </Box>
+                          )}
+                          
                           <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
                             <IconButton size="small" sx={{ color: '#8899a6' }}>
                               <FontAwesomeIcon icon={faComment} />
@@ -672,7 +751,15 @@ const ProfilePage = () => {
             </Typography>
           </Box>
         </Box>
-      </Box>
+      </Box>      {/* Review Dialog */}
+      <ReviewDialog 
+        open={openReviewDialog} 
+        onClose={handleCloseReviewDialog}
+        onReviewSubmitted={() => {
+          // Optionally refresh user comments here
+          window.location.reload();
+        }}
+      />
     </Box>
   );
 };

@@ -1,5 +1,17 @@
-import { Box, Typography, Avatar, IconButton, Paper, Badge, InputBase, List, ListItem, ListItemText, CircularProgress, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Autocomplete } from '@mui/material';
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Avatar, 
+  IconButton, 
+  Paper, 
+  Badge, 
+  InputBase, 
+  List, 
+  ListItem, 
+  ListItemText, 
+  Button, 
+} from '@mui/material';
 import GameFeed from '../../../contexts/components/GameFeed/GameFeed.tsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -17,7 +29,8 @@ import {
   faPencilAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth.ts';
-import { searchGame, searchGameSuggestions, createComment } from '../../../api/funcs.ts';
+import { searchGame, searchGameSuggestions } from '../../../api/funcs.ts';
+import ReviewDialog from '../../../contexts/components/Review/review.tsx';
 
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('following');
@@ -28,16 +41,8 @@ export const HomePage = () => {
   const [, setSearchResults] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const searchTimeoutRef = useRef<number | null>(null);
-  // Review dialog state
+  const searchTimeoutRef = useRef<number | null>(null);  // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
-  const [reviewGameId, setReviewGameId] = useState<number | null>(null);
-  const [reviewGameName, setReviewGameName] = useState('');
-  const [reviewText, setReviewText] = useState('');
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [gameSearchResults, setGameSearchResults] = useState<Array<{id: number, name: string}>>([]);
-  const [gameSearchQuery, setGameSearchQuery] = useState('');
-  const [gameSearching, setGameSearching] = useState(false);
   const [refreshFeed, setRefreshFeed] = useState(false);
 
   useEffect(() => {
@@ -139,7 +144,6 @@ export const HomePage = () => {
       }
     };
   }, []);
-
   // Review dialog handlers
   const handleOpenReviewDialog = () => {
     if (!isAuthenticated()) {
@@ -152,81 +156,6 @@ export const HomePage = () => {
 
   const handleCloseReviewDialog = () => {
     setOpenReviewDialog(false);
-    setReviewGameId(null);
-    setReviewGameName('');
-    setReviewText('');
-    setGameSearchQuery('');
-    setGameSearchResults([]);
-  };
-
-  const handleGameSearchChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const query = event.target.value;
-    setGameSearchQuery(query);
-    
-    // Clear any existing timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    if (query.trim().length >= 2) {
-      setGameSearching(true);
-      
-      // Set a new timeout with 500ms delay (0.5 seconds)
-      searchTimeoutRef.current = window.setTimeout(async () => {
-        try {
-          const results = await searchGameSuggestions({ query });
-          setGameSearchResults(results);
-        } catch (error) {
-          console.error('Error fetching game suggestions:', error);
-        } finally {
-          setGameSearching(false);
-        }
-      }, 500);
-    } else {
-      setGameSearchResults([]);
-      setGameSearching(false);
-    }
-  };
-
-  const handleGameSelect = (_event: React.SyntheticEvent, value: { id: number; name: string } | null) => {
-    if (value) {
-      setReviewGameId(value.id);
-      setReviewGameName(value.name);
-    } else {
-      setReviewGameId(null);
-      setReviewGameName('');
-    }
-  };
-
-  const handleReviewTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setReviewText(event.target.value);
-  };  const handleSubmitReview = async () => {
-    if (!reviewGameId || !reviewText.trim() || !isAuthenticated()) {
-      return; // Don't submit if any required field is missing
-    }
-    
-    try {
-      setReviewSubmitting(true);
-      await createComment({
-        id_game: reviewGameId,
-        comment: reviewText
-      });
-      
-      // Close the dialog first
-      handleCloseReviewDialog();
-      
-      // Add a small delay to ensure the backend has processed the review
-      setTimeout(() => {
-        // Then toggle the refresh trigger to refresh the feed
-        setRefreshFeed(prev => !prev);
-        
-      }, 500);
-    } catch (error) {
-      console.error('Error posting review:', error);
-      alert('Failed to post review. Please try again.');
-    } finally {
-      setReviewSubmitting(false);
-    }
   };
 
   return (
@@ -587,142 +516,13 @@ export const HomePage = () => {
           </Box>
         </Box>
       </Box>      {/* Review Dialog */}
-      <Dialog 
+      <ReviewDialog 
         open={openReviewDialog} 
         onClose={handleCloseReviewDialog}
-        fullWidth
-        maxWidth="sm"
-        PaperProps={{
-          sx: {
-            backgroundColor: '#172331',
-            color: 'white',
-            border: '1px solid #1e2c3c',
-          }
+        onReviewSubmitted={() => {
+          setRefreshFeed(prev => !prev);
         }}
-      >
-        <DialogTitle sx={{ color: 'white' }}>Create Game Review</DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          <Autocomplete
-            options={gameSearchResults}
-            getOptionLabel={(option) => option.name}
-            loading={gameSearching}
-            onChange={handleGameSelect}
-            componentsProps={{
-              popper: {
-                sx: {
-                  '& .MuiPaper-root': {
-                    backgroundColor: '#172331',
-                    color: 'white',
-                    border: '1px solid #1e2c3c'
-                  }
-                }
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#1e2c3c' },
-                '&:hover fieldset': { borderColor: '#1da1f2' },
-                '&.Mui-focused fieldset': { borderColor: '#1da1f2' },
-                color: 'white'
-              },
-              '& .MuiInputLabel-root': { color: '#8899a6' },
-              '& .MuiAutocomplete-endAdornment': { color: 'white' },
-              '& .MuiAutocomplete-paper': { 
-                backgroundColor: '#172331', 
-                color: 'white',
-                border: '1px solid #1e2c3c'
-              },
-              '& .MuiAutocomplete-listbox': {
-                backgroundColor: '#172331',
-                color: 'white',
-                '& .MuiAutocomplete-option': {
-                  '&:hover': {
-                    backgroundColor: 'rgba(29, 161, 242, 0.1)'
-                  },
-                  '&.Mui-focused': {
-                    backgroundColor: 'rgba(29, 161, 242, 0.2)'
-                  }
-                }
-              },            '& .MuiAutocomplete-noOptions': {
-                backgroundColor: '#172331',
-                color: '#8899a6'
-              },
-              '& .MuiAutocomplete-loading': {
-                color: '#8899a6'
-              }
-            }}            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Search for a game"
-                variant="outlined"
-                fullWidth
-                onChange={handleGameSearchChange}
-                value={gameSearchQuery}
-                sx={{
-                  input: { color: 'white' },
-                  '& .MuiOutlinedInput-root': { color: 'white' }
-                }}
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <>
-                      {gameSearching ? <CircularProgress color="inherit" size={20} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  ),
-                }}
-              />
-            )}
-          />
-          
-          {reviewGameName && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2">Selected game:</Typography>
-              <Typography variant="body1">{reviewGameName}</Typography>
-            </Box>
-          )}
-          
-          <TextField
-            label="Write your review"
-            multiline
-            rows={4}
-            fullWidth
-            variant="outlined"
-            value={reviewText}
-            onChange={handleReviewTextChange}
-            sx={{ 
-              mt: 2,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#1e2c3c' },
-                '&:hover fieldset': { borderColor: '#1da1f2' },
-                '&.Mui-focused fieldset': { borderColor: '#1da1f2' },
-                color: 'white'
-              },
-              '& .MuiInputLabel-root': { color: '#8899a6' }
-            }}
-          />
-        </DialogContent>
-        <DialogActions sx={{ backgroundColor: '#172331' }}>
-          <Button 
-            onClick={handleCloseReviewDialog} 
-            sx={{ color: '#8899a6' }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSubmitReview} 
-            variant="contained" 
-            disabled={!reviewGameId || !reviewText.trim() || reviewSubmitting}
-            sx={{ 
-              backgroundColor: '#1da1f2',
-              '&:hover': { backgroundColor: '#1a91da' },
-              '&.Mui-disabled': { backgroundColor: '#0e4667' }
-            }}
-          >
-            {reviewSubmitting ? <CircularProgress size={24} /> : 'Post Review'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      />
     </Box>
   );
 };

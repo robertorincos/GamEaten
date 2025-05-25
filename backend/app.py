@@ -11,6 +11,8 @@ from dotenv import load_dotenv, set_key
 import jwt
 from email_validator import EmailNotValidError, validate_email 
 from flask_cors import CORS
+import html
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
@@ -36,7 +38,8 @@ class Comments(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_game = db.Column(db.Integer, unique=False, nullable=False)
     username = db.Column(db.String(80), unique=False, nullable=False)
-    Comment = db.Column(db.String(255), unique=False, nullable=False)
+    Comment = db.Column(db.String(255), unique=False, nullable=True)  # Allow null for GIF-only comments
+    gif_url = db.Column(db.String(500), unique=False, nullable=True)  # For GIF URLs
     date_created = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -52,7 +55,10 @@ class Comments(db.Model):
             "id_game": self.id_game, 
             "user_id": self.username,  # Keep the original ID for reference
             "username": display_username,  # Add the actual username
-            "comment": self.Comment, 
+            "comment": self.Comment if self.Comment else "",  # Handle null comments
+            "gif_url": self.gif_url,
+            "has_text": bool(self.Comment and self.Comment.strip()),
+            "has_gif": bool(self.gif_url),
             "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S')
         }
 
@@ -258,11 +264,50 @@ def user():
 def edit(id):
     user_id = request.token_data['user']
     comment = Comments.query.get_or_404(id)
+    
     if str(comment.username) != str(user_id):
         return jsonify({"status": "Unauthorized - you can only edit your own comments"}), 403
-    comment.Comment = request.json['new_comment']
-    db.session.commit()
-    return {"status":"comentario atualizado"}, 200
+    
+    if not request.is_json:
+        return jsonify({"status": "Request must be JSON"}), 400
+    
+    # Get new comment text and GIF URL
+    new_comment_text = request.json.get('comment', '').strip() if 'comment' in request.json else comment.Comment
+    new_gif_url = request.json.get('gif_url', '').strip() if 'gif_url' in request.json else comment.gif_url
+    
+    # Handle explicit removal of text or GIF
+    if 'comment' in request.json and not new_comment_text:
+        new_comment_text = None
+    if 'gif_url' in request.json and not new_gif_url:
+        new_gif_url = None
+    
+    # Validate that we have either text or GIF (or both)
+    if not new_comment_text and not new_gif_url:
+        return jsonify({"status": "Either comment text or GIF URL is required"}), 400
+    
+    # Validate text comment if provided
+    if new_comment_text:
+        if len(new_comment_text) > 255:
+            return jsonify({"status": "Comment too long (max 255 characters)"}), 400
+        new_comment_text = html.escape(new_comment_text)
+    
+    # Validate GIF URL if provided
+    if new_gif_url:
+        if not is_valid_gif_url(new_gif_url):
+            return jsonify({"status": "Invalid GIF URL"}), 400
+    
+    try:
+        comment.Comment = new_comment_text
+        comment.gif_url = new_gif_url
+        db.session.commit()
+        
+        return jsonify({
+            "status": "comentario atualizado",
+            "comment": comment.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": f"Error updating comment: {str(e)}"}), 500
 
 # remover um comentario feito por voce
 @app.route('/api/comment/<int:id>', methods=['DELETE'])
@@ -282,7 +327,7 @@ def comment():
         return jsonify({"status": "Request must be JSON"}), 400
         
     # Verificar campos obrigatórios
-    required_fields = ['id_game', 'comment']
+    required_fields = ['id_game']
     for field in required_fields:
         if field not in request.json or not request.json[field]:
             return jsonify({"status": f"Field '{field}' is required"}), 400
@@ -297,22 +342,43 @@ def comment():
     except ValueError:
         return jsonify({"status": "Game ID must be an integer"}), 400
     
-    # Validar o comentário
-    comment_text = request.json['comment']
-    if len(comment_text) > 255:  # Limitar de acordo com o modelo de dados
-        return jsonify({"status": "Comment too long (max 255 characters)"}), 400
+    # Get comment text and GIF URL
+    comment_text = request.json.get('comment', '').strip()
+    gif_url = request.json.get('gif_url', '').strip()
     
-    # Sanitizar o comentário - remover HTML/scripts potencialmente perigosos
-    # Você pode usar bibliotecas como bleach para isso
-    # Exemplo simplificado:
-    import html
-    sanitized_comment = html.escape(comment_text)
+    # Validate that we have either text or GIF (or both)
+    if not comment_text and not gif_url:
+        return jsonify({"status": "Either comment text or GIF URL is required"}), 400
+    
+    # Validate text comment if provided
+    sanitized_comment = None
+    if comment_text:
+        if len(comment_text) > 255:
+            return jsonify({"status": "Comment too long (max 255 characters)"}), 400
+        sanitized_comment = html.escape(comment_text)
+    
+    # Validate GIF URL if provided
+    validated_gif_url = None
+    if gif_url:
+        if not is_valid_gif_url(gif_url):
+            return jsonify({"status": "Invalid GIF URL"}), 400
+        validated_gif_url = gif_url
     
     try:
-        new_comment = Comments(username=user_id, id_game=id_game, Comment=sanitized_comment)
+        new_comment = Comments(
+            username=user_id, 
+            id_game=id_game, 
+            Comment=sanitized_comment,
+            gif_url=validated_gif_url
+        )
         db.session.add(new_comment)
         db.session.commit()
-        return {'status': 'comentario criado'}, 201  # Código 201 é mais apropriado para criação
+        
+        # Return the created comment data
+        return jsonify({
+            'status': 'comentario criado',
+            'comment': new_comment.to_dict()
+        }), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": f"Error creating comment: {str(e)}"}), 500
@@ -492,6 +558,268 @@ def suggestions():
     except Exception as e:
         print(f"Error in suggestions route: {str(e)}")
         return jsonify([]), 500
+
+@app.route('/api/gifs/search', methods=['POST'])
+def search_gifs():
+    """
+    Search for GIFs using Giphy API
+    Similar to Discord's GIF search functionality
+    """
+    if not request.is_json:
+        return jsonify({"status": "Request must be JSON"}), 400
+    
+    if 'query' not in request.json or not request.json['query']:
+        return jsonify({"status": "Search query is required"}), 400
+    
+    query = request.json['query'].strip()
+    
+    if len(query) < 1:
+        return jsonify({"status": "Query too short"}), 400
+        
+    if len(query) > 100:
+        return jsonify({"status": "Query too long"}), 400
+    
+    # Get optional parameters
+    limit = request.json.get('limit', 20)  # Default 20 GIFs
+    offset = request.json.get('offset', 0)  # For pagination
+    rating = request.json.get('rating', 'pg-13')  # Content rating
+    
+    # Validate limit
+    if not isinstance(limit, int) or limit < 1 or limit > 50:
+        limit = 20
+    
+    # Validate offset
+    if not isinstance(offset, int) or offset < 0:
+        offset = 0
+    
+    # Validate rating
+    valid_ratings = ['y', 'g', 'pg', 'pg-13', 'r']
+    if rating not in valid_ratings:
+        rating = 'pg-13'
+    
+    try:
+        # Giphy API request
+        giphy_api_key = os.getenv('GIPHY_API_KEY')
+        if not giphy_api_key:
+            return jsonify({"status": "GIF search service not configured"}), 503
+        
+        giphy_url = "https://api.giphy.com/v1/gifs/search"
+        params = {
+            'api_key': giphy_api_key,
+            'q': query,
+            'limit': limit,
+            'offset': offset,
+            'rating': rating,
+            'lang': 'en'
+        }
+        
+        response = requests.get(giphy_url, params=params, timeout=10)
+        
+        if response.status_code != 200:
+            return jsonify({"status": "GIF search service unavailable"}), 503
+        
+        data = response.json()
+        
+        # Format the response for frontend
+        gifs = []
+        for gif in data.get('data', []):
+            gif_data = {
+                'id': gif.get('id'),
+                'title': gif.get('title', ''),
+                'url': gif.get('url'),  # Giphy page URL
+                'images': {
+                    # Different sizes for different use cases
+                    'original': {
+                        'url': gif.get('images', {}).get('original', {}).get('url'),
+                        'width': gif.get('images', {}).get('original', {}).get('width'),
+                        'height': gif.get('images', {}).get('original', {}).get('height'),
+                        'size': gif.get('images', {}).get('original', {}).get('size')
+                    },
+                    'preview': {
+                        'url': gif.get('images', {}).get('preview_gif', {}).get('url'),
+                        'width': gif.get('images', {}).get('preview_gif', {}).get('width'),
+                        'height': gif.get('images', {}).get('preview_gif', {}).get('height')
+                    },
+                    'fixed_height': {
+                        'url': gif.get('images', {}).get('fixed_height', {}).get('url'),
+                        'width': gif.get('images', {}).get('fixed_height', {}).get('width'),
+                        'height': gif.get('images', {}).get('fixed_height', {}).get('height')
+                    },
+                    'fixed_width': {
+                        'url': gif.get('images', {}).get('fixed_width', {}).get('url'),
+                        'width': gif.get('images', {}).get('fixed_width', {}).get('width'),
+                        'height': gif.get('images', {}).get('fixed_width', {}).get('height')
+                    },
+                    'downsized': {
+                        'url': gif.get('images', {}).get('downsized', {}).get('url'),
+                        'width': gif.get('images', {}).get('downsized', {}).get('width'),
+                        'height': gif.get('images', {}).get('downsized', {}).get('height')
+                    }
+                }
+            }
+            gifs.append(gif_data)
+        
+        # Pagination info
+        pagination = {
+            'total_count': data.get('pagination', {}).get('total_count', 0),
+            'count': data.get('pagination', {}).get('count', 0),
+            'offset': data.get('pagination', {}).get('offset', 0)
+        }
+        
+        return jsonify({
+            'gifs': gifs,
+            'pagination': pagination,
+            'query': query
+        }), 200
+    
+    except requests.exceptions.Timeout:
+        return jsonify({"status": "GIF search timed out"}), 504
+    except requests.exceptions.RequestException as e:
+        print(f"Giphy API error: {str(e)}")
+        return jsonify({"status": "GIF search service error"}), 503
+    except Exception as e:
+        print(f"Error in GIF search: {str(e)}")
+        return jsonify({"status": "An error occurred during GIF search"}), 500
+
+
+@app.route('/api/gifs/trending', methods=['GET'])
+def trending_gifs():
+    """
+    Get trending GIFs - similar to Discord's trending section
+    """
+    # Get optional parameters
+    limit = request.args.get('limit', 20, type=int)
+    offset = request.args.get('offset', 0, type=int)
+    rating = request.args.get('rating', 'pg-13')
+    
+    # Validate parameters
+    if limit < 1 or limit > 50:
+        limit = 20
+    if offset < 0:
+        offset = 0
+    
+    valid_ratings = ['y', 'g', 'pg', 'pg-13', 'r']
+    if rating not in valid_ratings:
+        rating = 'pg-13'
+    
+    try:
+        giphy_api_key = os.getenv('GIPHY_API_KEY')
+        if not giphy_api_key:
+            return jsonify({"status": "GIF service not configured"}), 503
+        
+        giphy_url = "https://api.giphy.com/v1/gifs/trending"
+        params = {
+            'api_key': giphy_api_key,
+            'limit': limit,
+            'offset': offset,
+            'rating': rating
+        }
+        
+        response = requests.get(giphy_url, params=params, timeout=10)
+        
+        if response.status_code != 200:
+            return jsonify({"status": "GIF service unavailable"}), 503
+        
+        data = response.json()
+        
+        # Format response (same as search)
+        gifs = []
+        for gif in data.get('data', []):
+            gif_data = {
+                'id': gif.get('id'),
+                'title': gif.get('title', ''),
+                'url': gif.get('url'),
+                'images': {
+                    'original': {
+                        'url': gif.get('images', {}).get('original', {}).get('url'),
+                        'width': gif.get('images', {}).get('original', {}).get('width'),
+                        'height': gif.get('images', {}).get('original', {}).get('height')
+                    },
+                    'preview': {
+                        'url': gif.get('images', {}).get('preview_gif', {}).get('url'),
+                        'width': gif.get('images', {}).get('preview_gif', {}).get('width'),
+                        'height': gif.get('images', {}).get('preview_gif', {}).get('height')
+                    },
+                    'fixed_height': {
+                        'url': gif.get('images', {}).get('fixed_height', {}).get('url'),
+                        'width': gif.get('images', {}).get('fixed_height', {}).get('width'),
+                        'height': gif.get('images', {}).get('fixed_height', {}).get('height')
+                    },
+                    'downsized': {
+                        'url': gif.get('images', {}).get('downsized', {}).get('url'),
+                        'width': gif.get('images', {}).get('downsized', {}).get('width'),
+                        'height': gif.get('images', {}).get('downsized', {}).get('height')
+                    }
+                }
+            }
+            gifs.append(gif_data)
+        
+        pagination = {
+            'total_count': data.get('pagination', {}).get('total_count', 0),
+            'count': data.get('pagination', {}).get('count', 0),
+            'offset': data.get('pagination', {}).get('offset', 0)
+        }
+        
+        return jsonify({
+            'gifs': gifs,
+            'pagination': pagination
+        }), 200
+    
+    except requests.exceptions.Timeout:
+        return jsonify({"status": "Request timed out"}), 504
+    except requests.exceptions.RequestException as e:
+        print(f"Giphy API error: {str(e)}")
+        return jsonify({"status": "GIF service error"}), 503
+    except Exception as e:
+        print(f"Error getting trending GIFs: {str(e)}")
+        return jsonify({"status": "An error occurred"}), 500
+
+
+@app.route('/api/gifs/categories', methods=['GET'])
+def gif_categories():
+    """
+    Get GIF categories - for Discord-like category browsing
+    """
+    try:
+        giphy_api_key = os.getenv('GIPHY_API_KEY')
+        if not giphy_api_key:
+            return jsonify({"status": "GIF service not configured"}), 503
+        
+        giphy_url = "https://api.giphy.com/v1/gifs/categories"
+        params = {
+            'api_key': giphy_api_key
+        }
+        
+        response = requests.get(giphy_url, params=params, timeout=10)
+        
+        if response.status_code != 200:
+            return jsonify({"status": "GIF service unavailable"}), 503
+        
+        data = response.json()
+        
+        categories = []
+        for category in data.get('data', []):
+            categories.append({
+                'name': category.get('name'),
+                'name_encoded': category.get('name_encoded'),
+                'gif': {
+                    'url': category.get('gif', {}).get('images', {}).get('fixed_height', {}).get('url'),
+                    'width': category.get('gif', {}).get('images', {}).get('fixed_height', {}).get('width'),
+                    'height': category.get('gif', {}).get('images', {}).get('fixed_height', {}).get('height')
+                }
+            })
+        
+        return jsonify({'categories': categories}), 200
+    
+    except requests.exceptions.Timeout:
+        return jsonify({"status": "Request timed out"}), 504
+    except requests.exceptions.RequestException as e:
+        print(f"Giphy API error: {str(e)}")
+        return jsonify({"status": "GIF service error"}), 503
+    except Exception as e:
+        print(f"Error getting categories: {str(e)}")
+        return jsonify({"status": "An error occurred"}), 500
+
 
 # Create all tables
 with app.app_context():

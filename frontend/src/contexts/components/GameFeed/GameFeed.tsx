@@ -14,12 +14,16 @@ interface Comment {
   username: string;
   comment: string;
   date_created: string;
+  gif_url?: string;
+  has_text: boolean;
+  has_gif: boolean;
+  comment_type?: 'text' | 'gif' | 'mixed';
 }
 
 interface GameInfo {
   id: number;
   name: string;
-  cover?: string;
+  // Removed cover property to avoid unnecessary API calls
 }
 
 const GameFeed = ({ refresh }: GameFeedProps) => {
@@ -43,8 +47,7 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
       
       if (response && response.comments) {
         setComments(response.comments);
-        
-        // Fetch game details for each unique game ID
+          // Fetch game details for each unique game ID (only names, no images for efficiency)
         const uniqueGameIds = [...new Set(response.comments.map((comment: { id_game: any; }) => comment.id_game))];
         
         // Create a batch of promises for all game detail requests
@@ -57,24 +60,11 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
               if (gameData && gameData.length > 0 && gameData[0]) {
                 const game = gameData[0];
                 
-                // Process cover image URL if it exists
-                let coverUrl = undefined;
-                if (game.cover && game.cover.url) {
-                  // Convert from thumbnail to larger image if needed
-                  coverUrl = game.cover.url.replace('t_thumb', 't_cover_big');
-                  
-                  // Ensure URL starts with https
-                  if (!coverUrl.startsWith('https:')) {
-                    coverUrl = 'https:' + coverUrl;
-                  }
-                }
-                
                 return {
-                  id: gameId as number, // Cast to number explicitly
+                  id: gameId as number,
                   data: {
-                    id: gameId as number, // Cast to number explicitly
-                    name: game.name || 'Unknown Game',
-                    cover: coverUrl
+                    id: gameId as number,
+                    name: game.name || 'Unknown Game'
                   }
                 };
               }
@@ -148,20 +138,30 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
     );
   }
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {comments.map((comment) => (
-        <PostCard 
-          key={comment.id}
-          id={comment.id}
-          username={comment.username}
-          text={comment.comment}
-          date={comment.date_created}
-          gameId={comment.id_game}
-          gameName={gameInfoCache[comment.id_game]?.name || 'Loading...'}
-          gameImage={gameInfoCache[comment.id_game]?.cover}
-        />
-      ))}
+  return (    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {comments.map((comment) => {
+        // Determine comment type based on content
+        let commentType: 'text' | 'gif' | 'mixed' = 'text';
+        if (comment.has_text && comment.has_gif) {
+          commentType = 'mixed';
+        } else if (comment.has_gif) {
+          commentType = 'gif';
+        }
+
+        return (
+          <PostCard 
+            key={comment.id}
+            id={comment.id}
+            username={comment.username}
+            text={comment.comment}
+            date={comment.date_created}
+            gameId={comment.id_game}
+            gameName={gameInfoCache[comment.id_game]?.name || 'Loading...'}
+            gifUrl={comment.gif_url}
+            commentType={commentType}
+          />
+        );
+      })}
     </Box>
   );
 };
