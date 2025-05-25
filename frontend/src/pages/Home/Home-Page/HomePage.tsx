@@ -314,6 +314,17 @@ export const HomePage = () => {
               <FontAwesomeIcon icon={faNewspaper} />
             </span>
             Game News          </Box>
+          
+          <Box 
+            className="nav-item"
+            onClick={() => window.location.href = '/profile'}
+            sx={{ cursor: 'pointer' }}
+          >
+            <span className="icon">
+              <FontAwesomeIcon icon={faUser} />
+            </span>
+            Profile
+          </Box>
         </Box>
         
         {/* Review Button - Similar to Twitter's Tweet button */}
