@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTimes, faSearch } from '@fortawesome/free-solid-svg-icons';
-import { searchGameSuggestions, createComment, searchGifs, getTrendingGifs } from '../../../api/funcs.ts';
+import { searchGameSuggestions, createReview, searchGifs, getTrendingGifs } from '../../../api/funcs.ts';
 import { GifData } from '../../../api/funcs.ts';
 
 interface ReviewDialogProps {
@@ -191,29 +191,29 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({
     try {
       setReviewSubmitting(true);
       
-      // Create mixed content comment
-      const commentData: any = {
+      // Create review data
+      const reviewData: any = {
         id_game: reviewGameId,
       };
 
       if (reviewText.trim()) {
-        commentData.comment = reviewText;
+        reviewData.review_text = reviewText; // Changed from 'comment' to 'review_text'
       }
 
       if (selectedGif) {
-        commentData.gif_url = selectedGif.images.original.url;
+        reviewData.gif_url = selectedGif.images.original.url;
       }
 
       // Set comment type based on content
       if (reviewText.trim() && selectedGif) {
-        commentData.comment_type = 'mixed';
+        reviewData.comment_type = 'mixed';
       } else if (selectedGif) {
-        commentData.comment_type = 'gif';
+        reviewData.comment_type = 'gif';
       } else {
-        commentData.comment_type = 'text';
+        reviewData.comment_type = 'text';
       }
 
-      await createComment(commentData);
+      await createReview(reviewData); // Changed from createComment to createReview
       
       handleClose();
       onReviewSubmitted();

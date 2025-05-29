@@ -73,8 +73,16 @@ export interface GifSearchResponse {
     query: string;
 }
 
-export interface CommentData {
+export interface ReviewData {
     id_game: number;
+    review_text?: string;
+    gif_url?: string;
+    comment_type?: 'text' | 'gif' | 'mixed';
+}
+
+export interface CommentData {
+    review_id: number;
+    parent_id?: number;
     comment?: string;
     gif_url?: string;
     comment_type?: 'text' | 'gif' | 'mixed';
@@ -84,7 +92,7 @@ export interface CommentUpdateData {
     new_comment: string;
 }
 
-export interface CommentQueryParams {
+export interface ReviewQueryParams {
     id_game: number;
     busca: string;
     page?: number;
@@ -102,7 +110,7 @@ export interface UserProfileData {
     username: string;
     follower_count: number;
     following_count: number;
-    comment_count: number;
+    review_count: number;
     is_following: boolean;
     is_own_profile: boolean;
 }
@@ -243,6 +251,18 @@ export const getGameDetails = async ({ id }: { id: number }) => {
 };
 
 /**
+ * Create a new review
+ */
+export const createReview = async (reviewData: ReviewData): Promise<any> => {
+    try {
+        const response = await axiosInstance.post('/api/review', reviewData);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+/**
  * Create a new comment
  */
 export const createComment = async (commentData: CommentData): Promise<any> => {
@@ -250,6 +270,19 @@ export const createComment = async (commentData: CommentData): Promise<any> => {
         const response = await axiosInstance.post('/api/comment', commentData);
         return response.data;
     } catch (error) {
+        throw error;
+    }
+};
+
+/**
+ * Get comments for a specific review
+ */
+export const getReviewComments = async (reviewId: number): Promise<any> => {
+    try {
+        const response = await axiosInstance.get(`/api/review/${reviewId}/comments`);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getReviewComments:', error);
         throw error;
     }
 };
@@ -279,15 +312,15 @@ export const deleteComment = async (commentId: number): Promise<any> => {
 };
 
 /**
- * Get comments based on query parameters
+ * Get reviews based on query parameters
  */
-export const getComments = async ({
+export const getReviews = async ({
   id_game,
   busca,
   page = 1,
   size = 20,
   user_id
-}: CommentQueryParams) => {
+}: ReviewQueryParams) => {
   try {
     // Use GET request with query parameters instead of POST with body
     const response = await axiosInstance.get('/api/ver', {
@@ -301,7 +334,7 @@ export const getComments = async ({
     });
     return response.data;
   } catch (error) {
-    console.error('API Error - getComments:', error);
+    console.error('API Error - getReviews:', error);
     throw error;
   }
 };

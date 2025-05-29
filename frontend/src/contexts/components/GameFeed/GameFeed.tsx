@@ -1,23 +1,24 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useState, useEffect } from 'react';
 import PostCard from '../PostCard/PostCard.tsx';
-import { getComments, getGameDetails } from '../../../api/funcs.ts';
+import { getReviews, getGameDetails } from '../../../api/funcs.ts';
 import { isAuthenticated } from '../../../api/auth.ts';
 
 interface GameFeedProps {
   refresh?: boolean;
 }
 
-interface Comment {
+interface Review {
   id: number;
   id_game: number;
   username: string;
-  comment: string;
+  review_text: string;
   date_created: string;
   gif_url?: string;
   has_text: boolean;
   has_gif: boolean;
   comment_type?: 'text' | 'gif' | 'mixed';
+  comment_count?: number;
 }
 
 interface GameInfo {
@@ -28,27 +29,28 @@ interface GameInfo {
 
 const GameFeed = ({ refresh }: GameFeedProps) => {
   const [loading, setLoading] = useState(true);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [gameInfoCache, setGameInfoCache] = useState<Record<number, GameInfo>>({});
   const [error, setError] = useState<string | null>(null);
+  const [highlightedReview, setHighlightedReview] = useState<number | null>(null);
 
-  const fetchComments = async () => {
+  const fetchReviews = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch comments based on which tab we're on. Default to global feed.
-      // For now, using 'ambos' to get all comments
-      const response = await getComments({
+      // Fetch reviews based on which tab we're on. Default to global feed.
+      // For now, using 'ambos' to get all reviews
+      const response = await getReviews({
         id_game: 0, // Not filtering by specific game for the feed
-        busca: 'ambos', // Get all comments
+        busca: 'ambos', // Get all reviews
         page: 1,
         size: 20
       });
       
-      if (response && response.comments) {
-        setComments(response.comments);
-          // Fetch game details for each unique game ID (only names, no images for efficiency)
-        const uniqueGameIds = [...new Set(response.comments.map((comment: { id_game: any; }) => comment.id_game))];
+      if (response && response.comments) { // API still returns 'comments' key for backward compatibility
+        setReviews(response.comments);
+        // Fetch game details for each unique game ID (only names, no images for efficiency)
+        const uniqueGameIds = [...new Set(response.comments.map((review: { id_game: any; }) => review.id_game))];
         
         // Create a batch of promises for all game detail requests
         const gameDetailPromises = uniqueGameIds.map(async (gameId) => {
@@ -87,22 +89,25 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
           }
         });
         
-        setGameInfoCache(newCache);
-      }
+        setGameInfoCache(newCache);      }
     } catch (err) {
-      console.error('Failed to fetch comments:', err);
+      console.error('Failed to fetch reviews:', err);
       setError('Failed to load reviews. Please try again later.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleReviewClick = (reviewId: number) => {
+    setHighlightedReview(highlightedReview === reviewId ? null : reviewId);
+  };
+
   useEffect(() => {
     if (isAuthenticated()) {
-      fetchComments();
+      fetchReviews();
     } else {
       setLoading(false);
-      setComments([]);
+      setReviews([]);
     }
   }, [refresh]); // Re-fetch when refresh changes
 
@@ -129,8 +134,7 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
       </Box>
     );
   }
-
-  if (comments.length === 0) {
+  if (reviews.length === 0) {
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography color="#8899a6">No reviews found. Be the first to share your gaming experience!</Typography>
@@ -138,27 +142,31 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
     );
   }
 
-  return (    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {comments.map((comment) => {
-        // Determine comment type based on content
-        let commentType: 'text' | 'gif' | 'mixed' = 'text';
-        if (comment.has_text && comment.has_gif) {
-          commentType = 'mixed';
-        } else if (comment.has_gif) {
-          commentType = 'gif';
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {reviews.map((review) => {
+        // Determine review type based on content
+        let reviewType: 'text' | 'gif' | 'mixed' = 'text';
+        if (review.has_text && review.has_gif) {
+          reviewType = 'mixed';
+        } else if (review.has_gif) {
+          reviewType = 'gif';
         }
 
         return (
           <PostCard 
-            key={comment.id}
-            id={comment.id}
-            username={comment.username}
-            text={comment.comment}
-            date={comment.date_created}
-            gameId={comment.id_game}
-            gameName={gameInfoCache[comment.id_game]?.name || 'Loading...'}
-            gifUrl={comment.gif_url}
-            commentType={commentType}
+            key={review.id}
+            id={review.id}
+            username={review.username}
+            text={review.review_text}
+            date={review.date_created}
+            gameId={review.id_game}
+            gameName={gameInfoCache[review.id_game]?.name || 'Loading...'}
+            gifUrl={review.gif_url}
+            commentType={reviewType}
+            commentCount={review.comment_count || 0}
+            isHighlighted={highlightedReview === review.id}
+            onReviewClick={() => handleReviewClick(review.id)}
           />
         );
       })}

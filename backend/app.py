@@ -46,16 +46,54 @@ class Follow(db.Model):
     def __repr__(self):
         return f'<Follow {self.follower_id} -> {self.following_id}>'
 
-class Comments(db.Model):
+# Reviews table - what was previously called "Comments"
+class Reviews(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_game = db.Column(db.Integer, unique=False, nullable=False)
     username = db.Column(db.String(80), unique=False, nullable=False)
-    Comment = db.Column(db.String(255), unique=False, nullable=True)  # Allow null for GIF-only comments
+    review_text = db.Column(db.String(255), unique=False, nullable=True)  # Allow null for GIF-only reviews
     gif_url = db.Column(db.String(500), unique=False, nullable=True)  # For GIF URLs
     date_created = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
-        return f'<Comment {self.id}>'
+        return f'<Review {self.id}>'
+
+    def to_dict(self):
+        # Get the actual username from the User model
+        user = User.query.filter_by(id=self.username).first()
+        display_username = user.username if user else f"User {self.username}"
+        
+        # Get comment count for this review
+        comment_count = Comments.query.filter_by(review_id=self.id).count()
+        
+        return {
+            "id": self.id, 
+            "id_game": self.id_game, 
+            "user_id": self.username,  # Keep the original ID for reference
+            "username": display_username,  # Add the actual username
+            "review_text": self.review_text if self.review_text else "",  # Handle null reviews
+            "gif_url": self.gif_url,
+            "has_text": bool(self.review_text and self.review_text.strip()),
+            "has_gif": bool(self.gif_url),
+            "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S'),
+            "comment_count": comment_count
+        }
+
+# Comments table - actual comments on reviews
+class Comments(db.Model):
+    comment_id = db.Column(db.Integer, primary_key=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('comments.comment_id'), nullable=True)  # For nested comments
+    review_id = db.Column(db.Integer, db.ForeignKey('reviews.id'), nullable=False)  # What review this comment belongs to
+    username = db.Column(db.String(80), unique=False, nullable=False)
+    comment = db.Column(db.String(255), unique=False, nullable=True)  # Allow null for GIF-only comments
+    gif_url = db.Column(db.String(500), unique=False, nullable=True)  # For GIF URLs
+    date_created = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Self-referential relationship for nested comments
+    parent = db.relationship('Comments', remote_side=[comment_id], backref='replies')
+    
+    def __repr__(self):
+        return f'<Comment {self.comment_id}>'
 
     def to_dict(self):
         # Get the actual username from the User model
@@ -63,15 +101,17 @@ class Comments(db.Model):
         display_username = user.username if user else f"User {self.username}"
         
         return {
-            "id": self.id, 
-            "id_game": self.id_game, 
+            "comment_id": self.comment_id,
+            "parent_id": self.parent_id,
+            "review_id": self.review_id,
             "user_id": self.username,  # Keep the original ID for reference
             "username": display_username,  # Add the actual username
-            "comment": self.Comment if self.Comment else "",  # Handle null comments
+            "comment": self.comment if self.comment else "",  # Handle null comments
             "gif_url": self.gif_url,
-            "has_text": bool(self.Comment and self.Comment.strip()),
+            "has_text": bool(self.comment and self.comment.strip()),
             "has_gif": bool(self.gif_url),
-            "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S')
+            "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S'),
+            "reply_count": len(self.replies) if hasattr(self, 'replies') else 0
         }
 
 @app.route('/api/search', methods=['POST'])
@@ -277,9 +317,8 @@ def get_user_profile(username):
         follower_id=current_user_id, 
         following_id=user.id
     ).first() is not None
-    
-    # Get user's comment count
-    comment_count = Comments.query.filter_by(username=str(user.id)).count()
+      # Get user's review count (renamed from comment_count)
+    review_count = Reviews.query.filter_by(username=str(user.id)).count()
     
     return jsonify({
         'status': 'success',
@@ -288,7 +327,7 @@ def get_user_profile(username):
             'username': user.username,
             'follower_count': follower_count,
             'following_count': following_count,
-            'comment_count': comment_count,
+            'comment_count': review_count,  # Keep the same key for backward compatibility
             'is_following': is_following,
             'is_own_profile': current_user_id == user.id
         }
@@ -422,9 +461,8 @@ def edit(id):
     
     if not request.is_json:
         return jsonify({"status": "Request must be JSON"}), 400
-    
-    # Get new comment text and GIF URL
-    new_comment_text = request.json.get('comment', '').strip() if 'comment' in request.json else comment.Comment
+      # Get new comment text and GIF URL
+    new_comment_text = request.json.get('comment', '').strip() if 'comment' in request.json else comment.comment
     new_gif_url = request.json.get('gif_url', '').strip() if 'gif_url' in request.json else comment.gif_url
     
     # Handle explicit removal of text or GIF
@@ -472,9 +510,10 @@ def delete(id):
     return {"status":"comentario deletado"}, 200
 
 
-@app.route('/api/comment', methods=['POST'])
+# Create a new review (what was previously called comment)
+@app.route('/api/review', methods=['POST'])
 @token_required
-def comment():
+def create_review():
     if not request.is_json:
         return jsonify({"status": "Request must be JSON"}), 400
         
@@ -493,6 +532,81 @@ def comment():
             return jsonify({"status": "Game ID must be positive"}), 400
     except ValueError:
         return jsonify({"status": "Game ID must be an integer"}), 400
+      # Get review text and GIF URL
+    review_text = request.json.get('review_text', request.json.get('comment', '')).strip()  # Accept both 'review_text' and 'comment' for compatibility
+    gif_url = request.json.get('gif_url', '').strip()
+    
+    # Validate that we have either text or GIF (or both)
+    if not review_text and not gif_url:
+        return jsonify({"status": "Either review text or GIF URL is required"}), 400
+    
+    # Validate text review if provided
+    sanitized_review = None
+    if review_text:
+        if len(review_text) > 255:
+            return jsonify({"status": "Review too long (max 255 characters)"}), 400
+        sanitized_review = html.escape(review_text)
+    
+    # Validate GIF URL if provided
+    validated_gif_url = None
+    if gif_url:
+        if not is_valid_gif_url(gif_url):
+            return jsonify({"status": "Invalid GIF URL"}), 400
+        validated_gif_url = gif_url
+    
+    try:
+        new_review = Reviews(
+            username=user_id, 
+            id_game=id_game, 
+            review_text=sanitized_review,
+            gif_url=validated_gif_url
+        )
+        db.session.add(new_review)
+        db.session.commit()
+        
+        # Return the created review data
+        return jsonify({
+            'status': 'review created',
+            'review': new_review.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": f"Error creating review: {str(e)}"}), 500
+
+# Create a comment on a review
+@app.route('/api/comment', methods=['POST'])
+@token_required
+def create_comment():
+    if not request.is_json:
+        return jsonify({"status": "Request must be JSON"}), 400
+        
+    # Verificar campos obrigatórios
+    required_fields = ['review_id']
+    for field in required_fields:
+        if field not in request.json or not request.json[field]:
+            return jsonify({"status": f"Field '{field}' is required"}), 400
+    
+    user_id = request.token_data['user']
+    
+    # Validate review_id
+    try:
+        review_id = int(request.json['review_id'])
+        review = Reviews.query.get(review_id)
+        if not review:
+            return jsonify({"status": "Review not found"}), 404
+    except ValueError:
+        return jsonify({"status": "Review ID must be an integer"}), 400
+    
+    # Get parent_id for nested comments (optional)
+    parent_id = request.json.get('parent_id')
+    if parent_id is not None:
+        try:
+            parent_id = int(parent_id)
+            parent_comment = Comments.query.get(parent_id)
+            if not parent_comment:
+                return jsonify({"status": "Parent comment not found"}), 404
+        except ValueError:
+            return jsonify({"status": "Parent ID must be an integer"}), 400
     
     # Get comment text and GIF URL
     comment_text = request.json.get('comment', '').strip()
@@ -518,9 +632,10 @@ def comment():
     
     try:
         new_comment = Comments(
-            username=user_id, 
-            id_game=id_game, 
-            Comment=sanitized_comment,
+            username=user_id,
+            review_id=review_id,
+            parent_id=parent_id,
+            comment=sanitized_comment,
             gif_url=validated_gif_url
         )
         db.session.add(new_comment)
@@ -534,6 +649,59 @@ def comment():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": f"Error creating comment: {str(e)}"}), 500
+
+# Get comments for a specific review
+@app.route('/api/review/<int:review_id>/comments', methods=['GET'])
+@token_required
+def get_review_comments(review_id):
+    try:
+        # Validate that the review exists
+        review = Reviews.query.get(review_id)
+        if not review:
+            return jsonify({"status": "Review not found"}), 404
+        
+        # Get pagination parameters
+        page = int(request.args.get('page', 1))
+        size = int(request.args.get('size', 20))
+        
+        if page < 1:
+            return jsonify({"status": "Page must be at least 1"}), 400
+        if size < 1 or size > 100:
+            return jsonify({"status": "Size must be between 1 and 100"}), 400
+        
+        offset = (page - 1) * size
+        
+        # Get top-level comments (no parent_id) for this review
+        total_comments = Comments.query.filter_by(review_id=review_id, parent_id=None).count()
+        comments = Comments.query.filter_by(review_id=review_id, parent_id=None).order_by(
+            Comments.date_created.asc()
+        ).offset(offset).limit(size).all()
+        
+        # Build comment tree with replies
+        comment_dicts = []
+        for comment in comments:
+            comment_dict = comment.to_dict()
+            # Get replies for this comment
+            replies = Comments.query.filter_by(parent_id=comment.comment_id).order_by(
+                Comments.date_created.asc()
+            ).all()
+            comment_dict['replies'] = [reply.to_dict() for reply in replies]
+            comment_dicts.append(comment_dict)
+        
+        result = {
+            "comments": comment_dicts,
+            "pagination": {
+                "total": total_comments,
+                "pages": (total_comments + size - 1) // size,
+                "current_page": page,
+                "per_page": size
+            }
+        }
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({"status": f"Error fetching comments: {str(e)}"}), 500
 
 @app.route('/api/ver', methods = ['GET', 'POST'])
 @token_required
@@ -615,32 +783,31 @@ def ver():
         except ValueError:
             return jsonify({"status": "user_id must be an integer"}), 400
     offset = (page - 1) * size
-    
     if busca == "game":
-        total_comments = Comments.query.filter_by(id_game=id_game).count()
-        comments = Comments.query.filter_by(id_game=id_game).order_by(Comments.date_created.desc()).offset(offset).limit(size).all()
-        comment_dicts = [comment.to_dict() for comment in comments]
+        total_reviews = Reviews.query.filter_by(id_game=id_game).count()
+        reviews = Reviews.query.filter_by(id_game=id_game).order_by(Reviews.date_created.desc()).offset(offset).limit(size).all()
+        review_dicts = [review.to_dict() for review in reviews]
         result = {
-            "comments": comment_dicts,
+            "comments": review_dicts,  # Keep 'comments' key for backward compatibility
             "pagination": {
-                "total": total_comments,
-                "pages": (total_comments + size - 1) // size,
+                "total": total_reviews,
+                "pages": (total_reviews + size - 1) // size,
                 "current_page": page,
                 "per_page": size
             }
         }
         return jsonify(result), 200
     elif busca == "user":
-        total_comments = Comments.query.filter_by(username=user_id).count()
-        comments = Comments.query.filter_by(username=user_id).order_by(
-            Comments.date_created.desc()
+        total_reviews = Reviews.query.filter_by(username=user_id).count()
+        reviews = Reviews.query.filter_by(username=user_id).order_by(
+            Reviews.date_created.desc()
         ).offset(offset).limit(size).all()
-        comment_dicts = [comment.to_dict() for comment in comments]
+        review_dicts = [review.to_dict() for review in reviews]
         result = {
-            "comments": comment_dicts,
+            "comments": review_dicts,  # Keep 'comments' key for backward compatibility
             "pagination": {
-                "total": total_comments,
-                "pages": (total_comments + size - 1) // size,
+                "total": total_reviews,
+                "pages": (total_reviews + size - 1) // size,
                 "current_page": page,
                 "per_page": size
             }
@@ -648,21 +815,21 @@ def ver():
         return jsonify(result), 200
     elif busca == "ambos":
         if id_game and id_game > 0:
-            total_comments = Comments.query.filter_by(id_game=id_game, username=user_id).count()
-            comments = Comments.query.filter_by(id_game=id_game, username=user_id).order_by(
-                Comments.date_created.desc()
+            total_reviews = Reviews.query.filter_by(id_game=id_game, username=user_id).count()
+            reviews = Reviews.query.filter_by(id_game=id_game, username=user_id).order_by(
+                Reviews.date_created.desc()
             ).offset(offset).limit(size).all()
         else:
-            total_comments = Comments.query.count()
-            comments = Comments.query.order_by(
-                Comments.date_created.desc()
+            total_reviews = Reviews.query.count()
+            reviews = Reviews.query.order_by(
+                Reviews.date_created.desc()
             ).offset(offset).limit(size).all()
-        comment_dicts = [comment.to_dict() for comment in comments]
+        review_dicts = [review.to_dict() for review in reviews]
         result = {
-            "comments": comment_dicts,
+            "comments": review_dicts,  # Keep 'comments' key for backward compatibility
             "pagination": {
-                "total": total_comments,
-                "pages": (total_comments + size - 1) // size,
+                "total": total_reviews,
+                "pages": (total_reviews + size - 1) // size,
                 "current_page": page,
                 "per_page": size
             }

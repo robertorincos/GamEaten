@@ -41,7 +41,7 @@ import {
   faPencilAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
-import { getGameDetails, searchGame, searchGameSuggestions, createComment, getComments } from '../../api/funcs';
+import { getGameDetails, searchGame, searchGameSuggestions, createReview, getReviews } from '../../api/funcs';
 import ReviewDialog from '../../contexts/components/Review/review';
 
 // Game interface based on API response
@@ -175,9 +175,8 @@ const Game = () => {
       try {
         setCommentLoading(true);
         const gameId = parseInt(id, 10);
-        
-        // Use the proper getComments function from funcs.ts
-        const response = await getComments({
+          // Use the proper getReviews function from funcs.ts
+        const response = await getReviews({
           id_game: gameId,
           busca: 'game',
           page: 1,
@@ -260,13 +259,13 @@ const Game = () => {
     
     try {
       const gameId = parseInt(id, 10);
-      await createComment({
+      await createReview({
         id_game: gameId,
-        comment: commentText
+        review_text: commentText
       });
       
-      // Refresh comments after posting
-      const response = await getComments({
+      // Refresh reviews after posting
+      const response = await getReviews({
         id_game: gameId,
         busca: 'game',
         page: 1,
@@ -1042,10 +1041,9 @@ const Game = () => {
         onClose={() => setOpenReviewDialog(false)}
         onReviewSubmitted={async () => {
           setOpenReviewDialog(false);
-          
-          // Refresh comments after review
+            // Refresh comments after review
           if (gameDetails?.id) {
-            const response = await getComments({
+            const response = await getReviews({
               id_game: gameDetails.id,
               busca: 'game',
               page: 1,

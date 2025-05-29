@@ -35,7 +35,7 @@ import {
   faUserMinus
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth';
-import { searchGame, searchGameSuggestions, getComments } from '../../../api/funcs';
+import { searchGame, searchGameSuggestions, getReviews } from '../../../api/funcs';
 import { ReviewDialog } from '../../../contexts/components/Review/review';
 import { useParams } from 'react-router-dom';
 import PostCard from '../../../contexts/components/PostCard/PostCard.tsx';
@@ -65,7 +65,7 @@ interface UserProfile {
   username: string;
   follower_count: number;
   following_count: number;
-  comment_count: number;
+  review_count: number;
   is_following: boolean;
   is_own_profile: boolean;
   join_date?: string;
@@ -137,7 +137,7 @@ const ProfilePage = () => {
               if (data.status === 'success') {
                 setCurrentUser({ username: data.user.username, id: data.user.id });
                 setCurrentUserStats({
-                  totalReviews: data.user.comment_count,
+                  totalReviews: data.user.review_count,
                   totalGames: 0,
                   followers: data.user.follower_count,
                   following: data.user.following_count,
@@ -194,7 +194,7 @@ const ProfilePage = () => {
               username: currentUser.username,
               follower_count: currentUserStats.followers,
               following_count: currentUserStats.following,
-              comment_count: currentUserStats.totalReviews,
+              review_count: currentUserStats.totalReviews,
               is_following: false,
               is_own_profile: true,
               join_date: currentUserStats.joinDate
@@ -218,7 +218,7 @@ const ProfilePage = () => {
               setUserProfile(data.user);
               viewedUserId = data.user.id;
               setUserStats({
-                totalReviews: data.user.comment_count,
+                totalReviews: data.user.review_count,
                 totalGames: 0,
                 followers: data.user.follower_count,
                 following: data.user.following_count,
@@ -238,7 +238,7 @@ const ProfilePage = () => {
         if (viewedUserId) {
           setCommentLoading(true);
           try {
-            const commentsResponse = await getComments({
+            const commentsResponse = await getReviews({
               id_game: 0,
               busca: 'user',
               page: 1,
