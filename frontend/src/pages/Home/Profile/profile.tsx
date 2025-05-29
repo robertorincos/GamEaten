@@ -28,16 +28,18 @@ import {
   faGamepad,
   faUser,
   faSpinner,
-  faComment,
-  faHeart,
-  faShare,
   faCalendarAlt,
   faEdit,
   faPencilAlt,
+  faUserPlus,
+  faUserMinus
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth';
 import { searchGame, searchGameSuggestions, getComments } from '../../../api/funcs';
-import ReviewDialog from '../../../contexts/components/Review/review';
+import { ReviewDialog } from '../../../contexts/components/Review/review';
+import { useParams } from 'react-router-dom';
+import PostCard from '../../../contexts/components/PostCard/PostCard.tsx';
+
 
 interface Comment {
   id: number;
@@ -58,7 +60,24 @@ interface UserStats {
   joinDate: string;
 }
 
+interface UserProfile {
+  id: number;
+  username: string;
+  follower_count: number;
+  following_count: number;
+  comment_count: number;
+  is_following: boolean;
+  is_own_profile: boolean;
+  join_date?: string;
+}
+
+interface GameResult {
+  id: number;
+  name: string;
+}
+
 const ProfilePage = () => {
+  const { username: profileUsername } = useParams<{ username: string }>();
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('Guest');
   const [activeTab, setActiveTab] = useState(0);
@@ -68,61 +87,243 @@ const ProfilePage = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userStats, setUserStats] = useState<UserStats>({
     totalReviews: 0,
     totalGames: 0,
-    followers: 125,
-    following: 48,
-    joinDate: '2024'
+    followers: 0,
+    following: 0,
+    joinDate: ''
   });
 
   // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
 
-  // Fetch user data and comments
+  // New state for game names
+  const [gameNames, setGameNames] = useState<{ [id: number]: string }>({});
+
+  // Add state for logged-in user
+  const [currentUser, setCurrentUser] = useState<{ username: string, id: number } | null>(null);
+
+  // Add state for logged-in user's stats
+  const [currentUserStats, setCurrentUserStats] = useState<UserStats>({
+    totalReviews: 0,
+    totalGames: 0,
+    followers: 0,
+    following: 0,
+    joinDate: ''
+  });
+
+  // Add loading state for game names
+  const [loadingGameNames, setLoadingGameNames] = useState(false);
+
+  // Fetch current user data on mount
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchCurrentUser = async () => {
       if (isAuthenticated()) {
         try {
-          setLoading(true);
           const userData = await getCurrentUser();
           if (userData && userData.status) {
-            setUsername(userData.status);
-          }
-
-          // Fetch user's comments
-          setCommentLoading(true);
-          const commentsResponse = await getComments({
-            id_game: 0,
-            busca: 'usuario', // Get user's comments
-            page: 1,
-            size: 50
-          });
-
-          if (commentsResponse && commentsResponse.comments) {
-            setUserComments(commentsResponse.comments);
-            
-            // Calculate stats from comments
-            const uniqueGames = new Set(commentsResponse.comments.map((comment: Comment) => comment.id_game));
-            setUserStats(prev => ({
-              ...prev,
-              totalReviews: commentsResponse.comments.length,
-              totalGames: uniqueGames.size
-            }));
+            // Fetch user id and stats
+            const response = await fetch(`/api/user/${userData.status}`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+              }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.status === 'success') {
+                setCurrentUser({ username: data.user.username, id: data.user.id });
+                setCurrentUserStats({
+                  totalReviews: data.user.comment_count,
+                  totalGames: 0,
+                  followers: data.user.follower_count,
+                  following: data.user.following_count,
+                  joinDate: data.user.join_date || new Date().toISOString().split('T')[0]
+                });
+              }
+            }
           }
         } catch (error) {
-          console.error('Failed to fetch user data:', error);
-        } finally {
-          setLoading(false);
-          setCommentLoading(false);
+          console.error('Error fetching current user:', error);
         }
-      } else {
+      }
+    };
+    fetchCurrentUser();
+  }, []); // Only run once on mount
+
+  // Fetch viewed user data and comments
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchUserData = async () => {
+      if (!isAuthenticated()) {
         setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        
+        // Clear previous data
+        setUserComments([]);
+        setUserProfile(null);
+        setUserStats({
+          totalReviews: 0,
+          totalGames: 0,
+          followers: 0,
+          following: 0,
+          joinDate: ''
+        });
+        setGameNames({});
+        
+        let viewedUserId = null;
+        let viewedUsername = null;
+        
+        if (!profileUsername) {
+          // Viewing own profile - use currentUser data
+          if (currentUser) {
+            viewedUsername = currentUser.username;
+            viewedUserId = currentUser.id;
+            setIsOwnProfile(true);
+            
+            setUserProfile({
+              id: currentUser.id,
+              username: currentUser.username,
+              follower_count: currentUserStats.followers,
+              following_count: currentUserStats.following,
+              comment_count: currentUserStats.totalReviews,
+              is_following: false,
+              is_own_profile: true,
+              join_date: currentUserStats.joinDate
+            });
+            setUserStats(currentUserStats);
+          }
+        } else {
+          // Viewing another user's profile
+          viewedUsername = profileUsername;
+          setIsOwnProfile(false);
+          
+          const response = await fetch(`/api/user/${profileUsername}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'success') {
+              setUserProfile(data.user);
+              viewedUserId = data.user.id;
+              setUserStats({
+                totalReviews: data.user.comment_count,
+                totalGames: 0,
+                followers: data.user.follower_count,
+                following: data.user.following_count,
+                joinDate: data.user.join_date || new Date().toISOString().split('T')[0]
+              });
+              setIsFollowing(data.user.is_following);
+            }
+          }
+        }
+
+        // Set the username for display
+        if (viewedUsername && isMounted) {
+          setUsername(viewedUsername);
+        }
+
+        // Fetch user's comments (for the profile being viewed)
+        if (viewedUserId) {
+          setCommentLoading(true);
+          try {
+            const commentsResponse = await getComments({
+              id_game: 0,
+              busca: 'user',
+              page: 1,
+              size: 50,
+              user_id: viewedUserId
+            });
+
+            if (commentsResponse && commentsResponse.comments && isMounted) {
+              const sortedComments = commentsResponse.comments.sort((a: Comment, b: Comment) => 
+                new Date(b.date_created).getTime() - new Date(a.date_created).getTime()
+              );
+              
+              setUserComments(sortedComments);
+              
+              const uniqueGames = new Set(sortedComments.map((comment: Comment) => comment.id_game));
+              setUserStats(prev => ({
+                ...prev,
+                totalReviews: sortedComments.length,
+                totalGames: uniqueGames.size
+              }));
+
+              // Fetch game names for the comments
+              const uniqueIds = Array.from(uniqueGames);
+              const names: Record<number, string> = {};
+              
+              setLoadingGameNames(true);
+              try {
+                // Fetch all game names in parallel
+                const gamePromises = uniqueIds.map(async (id) => {
+                  if (!gameNames[id as keyof typeof gameNames]) {
+                    try {
+                      const res = await fetch(`/api/game?id=${id}`);
+                      const data = await res.json();
+                      if (Array.isArray(data) && data[0]?.name) {
+                        return { id, name: data[0].name } as GameResult;
+                      }
+                    } catch (error) {
+                      console.error(`Error fetching game name for id ${id}:`, error);
+                    }
+                  }
+                  return null;
+                });
+
+                const results = await Promise.all(gamePromises);
+                results.forEach(result => {
+                  if (result && isMounted) {
+                    names[result.id] = result.name;
+                  }
+                });
+
+                if (Object.keys(names).length > 0 && isMounted) {
+                  setGameNames(prev => ({ ...prev, ...names }));
+                }
+              } finally {
+                if (isMounted) {
+                  setLoadingGameNames(false);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching comments:', error);
+            if (isMounted) {
+              setUserComments([]);
+            }
+          } finally {
+            if (isMounted) {
+              setCommentLoading(false);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchUserData();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profileUsername, currentUser, currentUserStats]);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -194,11 +395,37 @@ const ProfilePage = () => {
     setOpenReviewDialog(false);
   };
 
-  const formatDate = (dateString: string) => {
+  (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString();
     } catch {
       return 'Recently';
+    }
+  };
+
+  const handleFollow = async () => {
+    if (!userProfile) return;
+
+    try {
+      const response = await fetch('/api/follow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({ username: userProfile.username })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIsFollowing(data.is_following);
+        setUserStats(prev => ({
+          ...prev,
+          followers: data.is_following ? prev.followers + 1 : prev.followers - 1
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to follow/unfollow:', error);
     }
   };
 
@@ -207,7 +434,8 @@ const ProfilePage = () => {
       display: 'flex', 
       justifyContent: 'center',
       minHeight: '100vh', 
-      width: '100%',
+      width: '100vw',
+      overflowX: 'hidden',
       margin: 0,
       padding: 0,
       backgroundColor: '#0e1621'
@@ -291,6 +519,7 @@ const ProfilePage = () => {
           
           <Box 
             className="nav-item active"
+            onClick={() => window.location.href = '/profile'}
             sx={{ cursor: 'pointer' }}
           >
             <span className="icon">
@@ -386,22 +615,40 @@ const ProfilePage = () => {
                   gap: 2
                 }}
               >
-                <Button 
-                  variant="outlined" 
-                  startIcon={<FontAwesomeIcon icon={faEdit} />}
-                  sx={{ 
-                    borderRadius: '30px', 
-                    textTransform: 'none',
-                    borderColor: '#1da1f2',
-                    color: '#1da1f2',
-                    '&:hover': {
-                      borderColor: '#1a91da',
-                      backgroundColor: 'rgba(29, 161, 242, 0.1)'
-                    }
-                  }}
-                >
-                  Edit Profile
-                </Button>
+                {isOwnProfile ? (
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<FontAwesomeIcon icon={faEdit} />}
+                    sx={{ 
+                      borderRadius: '30px', 
+                      textTransform: 'none',
+                      borderColor: '#1da1f2',
+                      color: '#1da1f2',
+                      '&:hover': {
+                        borderColor: '#1a91da',
+                        backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                      }
+                    }}
+                  >
+                    Edit Profile
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="contained" 
+                    startIcon={<FontAwesomeIcon icon={isFollowing ? faUserMinus : faUserPlus} />}
+                    onClick={handleFollow}
+                    sx={{ 
+                      borderRadius: '30px', 
+                      textTransform: 'none',
+                      backgroundColor: isFollowing ? '#e0245e' : '#1da1f2',
+                      '&:hover': {
+                        backgroundColor: isFollowing ? '#c01e4f' : '#1a91da'
+                      }
+                    }}
+                  >
+                    {isFollowing ? 'Unfollow' : 'Follow'}
+                  </Button>
+                )}
               </Box>
             </Box>
 
@@ -418,7 +665,7 @@ const ProfilePage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, color: '#8899a6' }}>
                 <FontAwesomeIcon icon={faCalendarAlt} style={{ marginRight: '8px' }} />
                 <Typography variant="body2">
-                  Joined {userStats.joinDate}
+                  Joined {new Date(userStats.joinDate).toLocaleDateString()}
                 </Typography>
               </Box>
 
@@ -467,81 +714,33 @@ const ProfilePage = () => {
             {/* Reviews Tab */}
             {activeTab === 0 && (
               <Box sx={{ p: 2 }}>
-                {commentLoading ? (
+                {commentLoading || loadingGameNames ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                     <CircularProgress />
                   </Box>
                 ) : userComments.length > 0 ? (
-                  userComments.map((comment) => (
-                    <Box key={comment.id} sx={{ mb: 3, pb: 3, borderBottom: '1px solid #1e2c3c' }}>
-                      <Box sx={{ display: 'flex', gap: 2 }}>
-                        <Avatar sx={{ width: 48, height: 48 }}>
-                          {username?.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box sx={{ flexGrow: 1 }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                              {username}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                              {formatDate(comment.date_created)}
-                            </Typography>
-                          </Box>                          <Typography variant="body2" sx={{ color: '#8899a6', mb: 1 }}>
-                            Game ID: {comment.id_game}
-                          </Typography>
-                          
-                          {/* Display comment text if available */}
-                          {comment.comment && (
-                            <Typography variant="body1" sx={{ mt: 1, mb: comment.gif_url ? 2 : 1 }}>
-                              {comment.comment}
-                            </Typography>
-                          )}
-                          
-                          {/* Display GIF if available */}
-                          {comment.gif_url && (
-                            <Box 
-                              sx={{ 
-                                mt: 1, 
-                                mb: 1,
-                                display: 'flex',
-                                justifyContent: 'center',
-                                backgroundColor: '#1e2c3c',
-                                borderRadius: '12px',
-                                p: 1,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <img
-                                src={comment.gif_url}
-                                alt="Review GIF"
-                                style={{
-                                  maxWidth: '100%',
-                                  maxHeight: '200px',
-                                  borderRadius: '8px',
-                                  objectFit: 'contain'
-                                }}
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                            </Box>
-                          )}
-                          
-                          <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
-                            <IconButton size="small" sx={{ color: '#8899a6' }}>
-                              <FontAwesomeIcon icon={faComment} />
-                            </IconButton>
-                            <IconButton size="small" sx={{ color: '#8899a6' }}>
-                              <FontAwesomeIcon icon={faHeart} />
-                            </IconButton>
-                            <IconButton size="small" sx={{ color: '#8899a6' }}>
-                              <FontAwesomeIcon icon={faShare} />
-                            </IconButton>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Box>
-                  ))
+                  userComments.map((comment) => {
+                    let commentType: 'text' | 'gif' | 'mixed' = 'text';
+                    if (comment.has_text && comment.has_gif) {
+                      commentType = 'mixed';
+                    } else if (comment.has_gif) {
+                      commentType = 'gif';
+                    }
+
+                    return (
+                      <PostCard
+                        key={comment.id}
+                        id={comment.id}
+                        username={comment.username}
+                        text={comment.comment}
+                        date={comment.date_created}
+                        gameId={comment.id_game}
+                        gameName={gameNames[comment.id_game] || 'Loading...'}
+                        gifUrl={comment.gif_url}
+                        commentType={commentType}
+                      />
+                    );
+                  })
                 ) : (
                   <Box sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant="body1" sx={{ color: '#8899a6' }}>
@@ -666,14 +865,14 @@ const ProfilePage = () => {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Avatar sx={{ width: 60, height: 60 }}>
-              {username?.charAt(0).toUpperCase()}
+              {currentUser?.username?.charAt(0).toUpperCase()}
             </Avatar>
             <Box sx={{ ml: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                {username}
+                {currentUser?.username}
               </Typography>
               <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                @{username.toLowerCase()}
+                @{currentUser?.username?.toLowerCase()}
               </Typography>
             </Box>
           </Box>
@@ -712,7 +911,7 @@ const ProfilePage = () => {
           }}
         >
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            Profile Stats
+            {isOwnProfile ? 'Your Stats' : `${username}'s Stats`}
           </Typography>
           
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -751,12 +950,13 @@ const ProfilePage = () => {
             </Typography>
           </Box>
         </Box>
-      </Box>      {/* Review Dialog */}
+      </Box>
+
+      {/* Review Dialog */}
       <ReviewDialog 
         open={openReviewDialog} 
         onClose={handleCloseReviewDialog}
         onReviewSubmitted={() => {
-          // Optionally refresh user comments here
           window.location.reload();
         }}
       />

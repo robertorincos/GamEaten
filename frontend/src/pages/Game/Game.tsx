@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Typography, 
@@ -103,6 +103,7 @@ interface Comment {
 
 const Game = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [gameDetails, setGameDetails] = useState<GameDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -670,9 +671,17 @@ const Game = () => {
                         <Avatar sx={{ width: 48, height: 48 }}>
                           {comment.username?.toString().charAt(0).toUpperCase()}
                         </Avatar>
-                        <Box sx={{ flexGrow: 1 }}>
+                        <Box sx={{ flexGrow: 1 }}>                          
                           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                            <Typography 
+                              variant="subtitle1" 
+                              sx={{ 
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                '&:hover': { textDecoration: 'underline' }
+                              }}
+                              onClick={() => navigate(`/user/${comment.username}`)}
+                            >
                               User {comment.username}
                             </Typography>
                             <Typography variant="body2" sx={{ color: '#8899a6' }}>

@@ -34,6 +34,18 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+class Follow(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    follower_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    following_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Ensure a user can't follow the same person twice
+    __table_args__ = (db.UniqueConstraint('follower_id', 'following_id', name='unique_follow'),)
+    
+    def __repr__(self):
+        return f'<Follow {self.follower_id} -> {self.following_id}>'
+
 class Comments(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_game = db.Column(db.Integer, unique=False, nullable=False)
@@ -246,6 +258,146 @@ def user():
         return jsonify({'status': user.username}), 200
     else:
         return jsonify({'status': 'User not found'}), 404
+
+@app.route('/api/user/<username>', methods=['GET'])
+@token_required
+def get_user_profile(username):
+    """Get user profile by username"""
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'status': 'User not found'}), 404
+    
+    # Get follower and following counts
+    follower_count = Follow.query.filter_by(following_id=user.id).count()
+    following_count = Follow.query.filter_by(follower_id=user.id).count()
+    
+    # Check if current user is following this user
+    current_user_id = request.token_data['user']
+    is_following = Follow.query.filter_by(
+        follower_id=current_user_id, 
+        following_id=user.id
+    ).first() is not None
+    
+    # Get user's comment count
+    comment_count = Comments.query.filter_by(username=str(user.id)).count()
+    
+    return jsonify({
+        'status': 'success',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'follower_count': follower_count,
+            'following_count': following_count,
+            'comment_count': comment_count,
+            'is_following': is_following,
+            'is_own_profile': current_user_id == user.id
+        }
+    }), 200
+
+@app.route('/api/follow', methods=['POST'])
+@token_required
+def follow_user():
+    """Follow or unfollow a user"""
+    if not request.is_json or 'username' not in request.json:
+        return jsonify({'status': 'Username is required'}), 400
+    
+    target_username = request.json['username']
+    follower_id = request.token_data['user']
+    
+    # Find the target user
+    target_user = User.query.filter_by(username=target_username).first()
+    if not target_user:
+        return jsonify({'status': 'User not found'}), 404
+    
+    # Can't follow yourself
+    if follower_id == target_user.id:
+        return jsonify({'status': 'Cannot follow yourself'}), 400
+    
+    # Check if already following
+    existing_follow = Follow.query.filter_by(
+        follower_id=follower_id,
+        following_id=target_user.id
+    ).first()
+    
+    if existing_follow:
+        # Unfollow
+        db.session.delete(existing_follow)
+        db.session.commit()
+        return jsonify({'status': 'unfollowed', 'is_following': False}), 200
+    else:
+        # Follow
+        new_follow = Follow(follower_id=follower_id, following_id=target_user.id)
+        db.session.add(new_follow)
+        db.session.commit()
+        return jsonify({'status': 'followed', 'is_following': True}), 200
+
+@app.route('/api/user/<username>/followers', methods=['GET'])
+@token_required
+def get_user_followers(username):
+    """Get list of users following this user"""
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'status': 'User not found'}), 404
+    
+    page = int(request.args.get('page', 1))
+    size = int(request.args.get('size', 20))
+    
+    followers_query = db.session.query(User).join(
+        Follow, User.id == Follow.follower_id
+    ).filter(Follow.following_id == user.id)
+    
+    total_followers = followers_query.count()
+    followers = followers_query.offset((page - 1) * size).limit(size).all()
+    
+    followers_list = [{
+        'id': follower.id,
+        'username': follower.username
+    } for follower in followers]
+    
+    return jsonify({
+        'status': 'success',
+        'followers': followers_list,
+        'pagination': {
+            'total': total_followers,
+            'pages': (total_followers + size - 1) // size,
+            'current_page': page,
+            'per_page': size
+        }
+    }), 200
+
+@app.route('/api/user/<username>/following', methods=['GET'])
+@token_required
+def get_user_following(username):
+    """Get list of users this user is following"""
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'status': 'User not found'}), 404
+    
+    page = int(request.args.get('page', 1))
+    size = int(request.args.get('size', 20))
+    
+    following_query = db.session.query(User).join(
+        Follow, User.id == Follow.following_id
+    ).filter(Follow.follower_id == user.id)
+    
+    total_following = following_query.count()
+    following = following_query.offset((page - 1) * size).limit(size).all()
+    
+    following_list = [{
+        'id': user_following.id,
+        'username': user_following.username
+    } for user_following in following]
+    
+    return jsonify({
+        'status': 'success',
+        'following': following_list,
+        'pagination': {
+            'total': total_following,
+            'pages': (total_following + size - 1) // size,
+            'current_page': page,
+            'per_page': size
+        }
+    }), 200
     
 # cria um comentario
 # @app.route('/comment', methods=['POST'])
@@ -430,8 +582,9 @@ def ver():
                 return jsonify({"status": "Game ID must be an integer"}), 400
         else:
             id_game = None
+        # New: get user_id from POST body if present
+        user_id = request.json.get('user_id')
     else:
-        # GET method - parameters come from query string
         busca = request.args.get('busca')
         if not busca:
             return jsonify({"status": "Search type (busca) is required"}), 400
@@ -443,7 +596,6 @@ def ver():
             id_game_str = request.args.get('id_game')
             if not id_game_str:
                 return jsonify({"status": "Game ID is required for this search type"}), 400
-                
             try:
                 id_game = int(id_game_str)
                 if id_game < 0:  # Allow id_game=0 for home feed
@@ -452,11 +604,17 @@ def ver():
                 return jsonify({"status": "Game ID must be an integer"}), 400
         else:
             id_game = None
-    
-    username = request.token_data['user']
+        # New: get user_id from GET params if present
+        user_id = request.args.get('user_id')
+    # Default to logged-in user if not provided
+    if user_id is None or user_id == '':
+        user_id = request.token_data['user']
+    else:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({"status": "user_id must be an integer"}), 400
     offset = (page - 1) * size
-    
-    # Continuar com a lógica existente para cada tipo de busca...
     
     if busca == "game":
         total_comments = Comments.query.filter_by(id_game=id_game).count()
@@ -473,11 +631,10 @@ def ver():
         }
         return jsonify(result), 200
     elif busca == "user":
-        total_comments = Comments.query.filter_by(username=username).count()
-        comments = Comments.query.filter_by(username=username).order_by(
+        total_comments = Comments.query.filter_by(username=user_id).count()
+        comments = Comments.query.filter_by(username=user_id).order_by(
             Comments.date_created.desc()
         ).offset(offset).limit(size).all()
-        
         comment_dicts = [comment.to_dict() for comment in comments]
         result = {
             "comments": comment_dicts,
@@ -490,20 +647,16 @@ def ver():
         }
         return jsonify(result), 200
     elif busca == "ambos":
-        # For the home feed, we want to show all comments
         if id_game and id_game > 0:
-            # If a specific game is requested
-            total_comments = Comments.query.filter_by(id_game=id_game, username=username).count()
-            comments = Comments.query.filter_by(id_game=id_game, username=username).order_by(
+            total_comments = Comments.query.filter_by(id_game=id_game, username=user_id).count()
+            comments = Comments.query.filter_by(id_game=id_game, username=user_id).order_by(
                 Comments.date_created.desc()
             ).offset(offset).limit(size).all()
         else:
-            # In case id_game is 0, return all comments for the home feed
             total_comments = Comments.query.count()
             comments = Comments.query.order_by(
                 Comments.date_created.desc()
             ).offset(offset).limit(size).all()
-        
         comment_dicts = [comment.to_dict() for comment in comments]
         result = {
             "comments": comment_dicts,

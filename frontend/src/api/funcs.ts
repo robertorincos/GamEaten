@@ -89,11 +89,49 @@ export interface CommentQueryParams {
     busca: string;
     page?: number;
     size?: number;
+    user_id?: number;
 }
 
 export interface GameSearchSuggestionsResponse {
   id: number;
   name: string;
+}
+
+export interface UserProfileData {
+    id: number;
+    username: string;
+    follower_count: number;
+    following_count: number;
+    comment_count: number;
+    is_following: boolean;
+    is_own_profile: boolean;
+}
+
+export interface UserProfileResponse {
+    status: string;
+    user: UserProfileData;
+}
+
+export interface FollowResponse {
+    status: string;
+    is_following: boolean;
+}
+
+export interface UserListItem {
+    id: number;
+    username: string;
+}
+
+export interface UserListResponse {
+    status: string;
+    followers?: UserListItem[];
+    following?: UserListItem[];
+    pagination: {
+        total: number;
+        pages: number;
+        current_page: number;
+        per_page: number;
+    };
 }
 
 /**
@@ -243,17 +281,13 @@ export const deleteComment = async (commentId: number): Promise<any> => {
 /**
  * Get comments based on query parameters
  */
-export const getComments = async ({ 
-  id_game, 
-  busca, 
-  page = 1, 
-  size = 20 
-}: { 
-  id_game: number; 
-  busca: string; 
-  page?: number; 
-  size?: number 
-}) => {
+export const getComments = async ({
+  id_game,
+  busca,
+  page = 1,
+  size = 20,
+  user_id
+}: CommentQueryParams) => {
   try {
     // Use GET request with query parameters instead of POST with body
     const response = await axiosInstance.get('/api/ver', {
@@ -261,7 +295,8 @@ export const getComments = async ({
         page, 
         size,
         id_game,
-        busca
+        busca,
+        ...(user_id ? { user_id } : {})
       }
     });
     return response.data;
@@ -324,4 +359,68 @@ export const getGifCategories = async (): Promise<any> => {
     console.error('API Error - getGifCategories:', error);
     throw error;
   }
+};
+
+/**
+ * Get user profile by username
+ */
+export const getUserProfile = async (username: string): Promise<UserProfileResponse> => {
+    try {
+        const response = await axiosInstance.get(`/api/user/${username}`);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getUserProfile:', error);
+        throw error;
+    }
+};
+
+/**
+ * Follow or unfollow a user
+ */
+export const followUser = async (username: string): Promise<FollowResponse> => {
+    try {
+        const response = await axiosInstance.post('/api/follow', { username });
+        return response.data;
+    } catch (error) {
+        console.error('API Error - followUser:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get user followers list
+ */
+export const getUserFollowers = async (
+    username: string, 
+    page: number = 1, 
+    size: number = 20
+): Promise<UserListResponse> => {
+    try {
+        const response = await axiosInstance.get(`/api/user/${username}/followers`, {
+            params: { page, size }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getUserFollowers:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get user following list
+ */
+export const getUserFollowing = async (
+    username: string, 
+    page: number = 1, 
+    size: number = 20
+): Promise<UserListResponse> => {
+    try {
+        const response = await axiosInstance.get(`/api/user/${username}/following`, {
+            params: { page, size }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getUserFollowing:', error);
+        throw error;
+    }
 };

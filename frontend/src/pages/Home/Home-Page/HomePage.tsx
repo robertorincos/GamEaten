@@ -331,7 +331,8 @@ export const HomePage = () => {
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             {activeTab === 'following' ? 'Following' : activeTab === 'global' ? 'Global' : 'Game News'}
           </Typography>
-        </Box>        <Box sx={{ p: 2 }}>
+        </Box>        
+        <Box sx={{ p: 2 }}>
           {/* Force GameFeed to re-render when refreshTrigger changes */}
           <GameFeed key={`feed-${refreshFeed}`}/>
         </Box>

@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faHeart, faComment, faShare, faEllipsisH, faGamepad } from '@fortawesome/free-solid-svg-icons';
 import { useState } from 'react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 interface PostCardProps {
   id: number;
@@ -16,6 +17,7 @@ interface PostCardProps {
 }
 
 const PostCard = ({ username, text, date, gameId, gameName, gifUrl }: PostCardProps) => {
+  const navigate = useNavigate();
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(Math.floor(Math.random() * 50)); // Random placeholder
   const [commentCount] = useState(Math.floor(Math.random() * 10)); // Random placeholder
@@ -44,6 +46,10 @@ const PostCard = ({ username, text, date, gameId, gameName, gifUrl }: PostCardPr
     window.location.href = `/game/${gameId}`;
   };
 
+  const handleUserClick = () => {
+    navigate(`/user/${username}`);
+  };
+
   return (
     <Card sx={{ 
       borderRadius: '16px', 
@@ -66,7 +72,17 @@ const PostCard = ({ username, text, date, gameId, gameName, gifUrl }: PostCardPr
         }
         title={
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{username}</Typography>
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                fontWeight: 700,
+                cursor: 'pointer',
+                '&:hover': { textDecoration: 'underline' }
+              }}
+              onClick={handleUserClick}
+            >
+              {username}
+            </Typography>
             <Typography variant="body2" sx={{ ml: 1, color: '#8899a6' }}>@{username.toLowerCase()}</Typography>
             <Typography variant="body2" sx={{ ml: 1, color: '#8899a6' }}>· {formatDate(date)}</Typography>
           </Box>
