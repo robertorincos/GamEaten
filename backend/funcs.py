@@ -65,7 +65,10 @@ def token_required(func):
         if not token:
             return jsonify({'Alert!': 'Token is missing!'}), 401
         try:
-            data = jwt.decode(token, os.getenv('secret'), algorithms=["HS256"])
+            secret = os.getenv('secret') or os.getenv('SECRET_KEY')
+            if isinstance(secret, bytes):
+                secret = secret.decode('utf-8')
+            data = jwt.decode(token, secret, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
             return jsonify({'Message': 'Token has expired'}), 401
         except jwt.InvalidTokenError:

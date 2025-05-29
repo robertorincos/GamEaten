@@ -20,7 +20,8 @@ services:
 
   backend:
     container_name: backend
-    build: ./backend
+    image: ghcr.io/robertorincos/gameaten-backend:latest
+    #build: ./backend
     ports:
       - "5000:5000"
     depends_on:
@@ -28,6 +29,7 @@ services:
         condition: service_healthy 
     environment:
       DB_URI: mysql+pymysql://root@mysql_db:3306/gameaten_db
+      GIPHY_API_KEY: ${GIPHY_API_KEY}
       IGDB_CLIENT: ${IGDB_CLIENT}
       IGDB_SECRET: ${IGDB_SECRET}
       CLIENT_SECRET: ${CLIENT_SECRET}
@@ -35,8 +37,9 @@ services:
       FLASK_ENV: production
 
   frontend:
+    image: ghcr.io/robertorincos/gameaten-frontend:latest
     container_name: frontend
-    build: ./frontend
+    #build: ./frontend
     ports:
       - "80:80"
     depends_on:
