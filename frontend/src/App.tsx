@@ -7,6 +7,8 @@ import HomePage from './pages/Home/Home-Page/HomePage';
 import Game from './pages/Game/Game';
 import ProfilePage from './pages/Home/Profile/profile';
 import GameGiveaways from './pages/GameGiveaways/GameGiveaways';
+import SavedGamesPage from './pages/SavedGames/SavedGamesPage';
+import MostReviewedGames from './pages/MostReviewed/MostReviewedGames';
 
 // Define props interface for ProtectedRoute
 interface ProtectedRouteProps {
@@ -41,6 +43,14 @@ function App() {
           } 
         />
         <Route 
+          path="/most-reviewed" 
+          element={
+            <ProtectedRoute>
+              <MostReviewedGames />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/game/:id" 
           element={
             <ProtectedRoute>
@@ -61,6 +71,22 @@ function App() {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/saved-games" 
+          element={
+            <ProtectedRoute>
+              <SavedGamesPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/saved-games/:username" 
+          element={
+            <ProtectedRoute>
+              <SavedGamesPage />
             </ProtectedRoute>
           } 
         />

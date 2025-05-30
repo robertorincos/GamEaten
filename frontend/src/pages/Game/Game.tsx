@@ -6,7 +6,6 @@ import {
   Avatar, 
   IconButton, 
   Paper, 
-  Badge, 
   InputBase, 
   List, 
   ListItem, 
@@ -29,11 +28,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
-  faGlobe, 
   faGift, 
-  faBell, 
-  faEnvelope, 
-  faCog, 
   faSearch,
   faSignOutAlt,
   faGamepad,
@@ -46,6 +41,7 @@ import {
   faPencilAlt,
   faBars,
   faEllipsisV,
+  faTrophy
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
 import { getGameDetails, searchGame, searchGameSuggestions, createReview, getReviews } from '../../api/funcs';
@@ -92,6 +88,8 @@ interface Comment {
   id: number;
   id_game: number;
   username: string;
+  user_id?: number;
+  profile_photo?: string;
   review_text: string;
   date_created: string;
   gif_url?: string;
@@ -125,6 +123,7 @@ const Game = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [username, setUsername] = useState('Guest');
+  const [currentUser, setCurrentUser] = useState<{ username: string, id: number, profile_photo?: string } | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentLoading, setCommentLoading] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -132,6 +131,8 @@ const Game = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isGameSaved, setIsGameSaved] = useState(false);
+  const [savingGame, setSavingGame] = useState(false);
   
   // Mobile-specific state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -139,6 +140,38 @@ const Game = () => {
 
   // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
+
+  // Fetch comments function
+  const fetchComments = async () => {
+    if (!id) return;
+    
+    try {
+      setCommentLoading(true);
+      const gameId = parseInt(id, 10);
+        // Use the proper getReviews function from funcs.ts
+      const response = await getReviews({
+        id_game: gameId,
+        busca: 'game',
+        page: 1,
+        size: 20
+      });
+      
+      if (response && response.comments) {
+        setComments(response.comments);
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      // Show empty comments rather than crashing
+      setComments([]);
+    } finally {
+      setCommentLoading(false);
+    }
+  };
+
+  // Fetch comments
+  useEffect(() => {
+    fetchComments();
+  }, [id]);
 
   // Fetch game details
   useEffect(() => {
@@ -177,6 +210,23 @@ const Game = () => {
           const userData = await getCurrentUser();
           if (userData && userData.status) {
             setUsername(userData.status);
+            
+            // Fetch complete user data including profile photo
+            const response = await fetch(`/api/user/${userData.status}`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+              }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.status === 'success') {
+                setCurrentUser({ 
+                  username: data.user.username, 
+                  id: data.user.id, 
+                  profile_photo: data.user.profile_photo 
+                });
+              }
+            }
           }
         } catch (error) {
           console.error('Failed to fetch user data:', error);
@@ -188,36 +238,80 @@ const Game = () => {
     fetchUser();
   }, [id]);
 
-  // Fetch comments
+  // Check if game is saved when game details and user are loaded
   useEffect(() => {
-    const fetchComments = async () => {
-      if (!id) return;
+    const checkIfGameSaved = async () => {
+      if (!gameDetails?.id || !isAuthenticated()) return;
       
       try {
-        setCommentLoading(true);
-        const gameId = parseInt(id, 10);
-          // Use the proper getReviews function from funcs.ts
-        const response = await getReviews({
-          id_game: gameId,
-          busca: 'game',
-          page: 1,
-          size: 20
+        const response = await fetch('/api/saved-games', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
         });
         
-        if (response && response.comments) {
-          setComments(response.comments);
+        const data = await response.json();
+        if (data.status === 'success') {
+          const savedGameIds = data.saved_games.map((game: any) => game.game_id);
+          setIsGameSaved(savedGameIds.includes(gameDetails.id));
         }
       } catch (error) {
-        console.error('Error fetching comments:', error);
-        // Show empty comments rather than crashing
-        setComments([]);
-      } finally {
-        setCommentLoading(false);
+        console.error('Error checking saved games:', error);
       }
     };
 
-    fetchComments();
-  }, [id]);
+    checkIfGameSaved();
+  }, [gameDetails?.id]);
+
+  // Handle save/unsave game
+  const handleSaveGame = async () => {
+    if (!gameDetails?.id || !isAuthenticated()) return;
+    
+    try {
+      setSavingGame(true);
+      
+      if (isGameSaved) {
+        // Remove from saved games
+        const response = await fetch('/api/saved-games', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          },
+          body: JSON.stringify({ game_id: gameDetails.id })
+        });
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+          setIsGameSaved(false);
+        }
+      } else {
+        // Add to saved games
+        const response = await fetch('/api/saved-games', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          },
+          body: JSON.stringify({ game_id: gameDetails.id })
+        });
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+          setIsGameSaved(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving/unsaving game:', error);
+    } finally {
+      setSavingGame(false);
+    }
+  };
+
+  // Navigate to profile with saved games tab
+  const handleNavigateToSavedGames = () => {
+    navigate('/profile?tab=saved-games');
+  };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -432,7 +526,7 @@ const Game = () => {
               Home
             </Box>
             <Box 
-              onClick={() => { navigate('/profile'); setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/giveaways'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -441,8 +535,21 @@ const Game = () => {
                 '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
               }}
             >
-              <FontAwesomeIcon icon={faUser} style={{ marginRight: '15px' }} />
-              Profile
+              <FontAwesomeIcon icon={faGift} style={{ marginRight: '15px' }} />
+              Game Giveaways
+            </Box>
+            <Box 
+              onClick={() => { navigate('/most-reviewed'); setMobileDrawerOpen(false); }}
+              sx={{ 
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
+              }}
+            >
+              <FontAwesomeIcon icon={faTrophy} style={{ marginRight: '15px' }} />
+              Most Reviewed
             </Box>
           </Box>
           
@@ -555,17 +662,6 @@ const Game = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => navigate('/global')}
-              sx={{ cursor: 'pointer' }}
-            >
-              <span className="icon">
-                <FontAwesomeIcon icon={faGlobe} />
-              </span>
-              Global
-            </Box>
-            
-            <Box 
-              className="nav-item"
               onClick={() => navigate('/giveaways')}
               sx={{ cursor: 'pointer' }}
             >
@@ -577,13 +673,13 @@ const Game = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/most-reviewed')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
-                <FontAwesomeIcon icon={faUser} />
+                <FontAwesomeIcon icon={faTrophy} />
               </span>
-              Profile
+              Most Reviewed
             </Box>
           </Box>
           
@@ -690,7 +786,7 @@ const Game = () => {
               </Box>
 
               {/* Action buttons */}
-              <Box 
+              <Box
                 sx={{ 
                   position: 'absolute', 
                   bottom: isMobile ? '-30px' : '-40px', 
@@ -701,16 +797,22 @@ const Game = () => {
               >
                 <Button 
                   variant="contained" 
-                  color="primary"
-                  startIcon={<FontAwesomeIcon icon={faBookmark} />}
+                  color={isGameSaved ? "secondary" : "primary"}
+                  startIcon={savingGame ? <CircularProgress size={16} color="inherit" /> : <FontAwesomeIcon icon={faBookmark} />}
+                  onClick={handleSaveGame}
+                  disabled={savingGame || !isAuthenticated()}
                   sx={{ 
                     borderRadius: '30px', 
                     textTransform: 'none',
                     fontSize: isMobile ? '12px' : '14px',
-                    px: isMobile ? 2 : 3
+                    px: isMobile ? 2 : 3,
+                    backgroundColor: isGameSaved ? '#e0245e' : '#1da1f2',
+                    '&:hover': {
+                      backgroundColor: isGameSaved ? '#c01e4f' : '#1a91da'
+                    }
                   }}
                 >
-                  {isMobile ? 'Save' : 'Save Game'}
+                  {isMobile ? (isGameSaved ? 'Saved' : 'Save') : (isGameSaved ? 'Remove from Saved' : 'Save Game')}
                 </Button>
               </Box>
             </Box>
@@ -870,6 +972,9 @@ const Game = () => {
                           userHasLiked={comment.user_has_liked || false}
                           repostsCount={comment.reposts_count || 0}
                           userHasReposted={comment.user_has_reposted || false}
+                          profilePhoto={comment.profile_photo}
+                          userId={comment.user_id}
+                          onPostDeleted={fetchComments}
                         />
                       );
                     })}
@@ -936,7 +1041,7 @@ const Game = () => {
             {activeTab === 2 && (
               <Box sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="body1" sx={{ color: '#8899a6', py: 4 }}>
-                  Similar games feature coming soon!
+                  Similar games recommendations will appear here.
                 </Typography>
               </Box>
             )}
@@ -1034,49 +1139,116 @@ const Game = () => {
           sx={{ 
             backgroundColor: '#172331', 
             borderRadius: '15px',
-            padding: '20px',
+            padding: '24px',
             mb: 3,
-            border: '1px solid #1e2c3c'
+            border: '1px solid #1e2c3c',
+            textAlign: 'center'
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <Avatar sx={{ width: 60, height: 60 }}>
+          {/* Centered Profile Photo - Bigger */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+            <Avatar 
+              src={currentUser?.profile_photo || undefined}
+              sx={{ 
+                width: 120, 
+                height: 120,
+                fontSize: '48px',
+                backgroundColor: '#1da1f2'
+              }}
+            >
               {username?.charAt(0).toUpperCase()}
             </Avatar>
-            <Box sx={{ ml: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                {username}
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                @{username.toLowerCase()}
-              </Typography>
-            </Box>
           </Box>
           
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-              onClick={() => navigate('/profile')}>
-              <FontAwesomeIcon icon={faUser} />
-            </IconButton>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-              <Badge badgeContent={4} color="error">
-                <FontAwesomeIcon icon={faBell} />
-              </Badge>
-            </IconButton>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-              <Badge badgeContent={2} color="error">
-                <FontAwesomeIcon icon={faEnvelope} />
-              </Badge>
-            </IconButton>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-              <FontAwesomeIcon icon={faCog} />
-            </IconButton>
-            <IconButton 
-              sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-              onClick={handleLogout}
+          {/* Centered Username with @ */}
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#8899a6',
+              fontSize: '16px',
+              fontWeight: 500,
+              mb: 3
+            }}
+          >
+            @{username?.toLowerCase()}
+          </Typography>
+          
+          {/* Three Big Buttons */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<FontAwesomeIcon icon={faUser} />}
+              onClick={() => navigate('/profile')}
+              sx={{
+                borderRadius: '25px',
+                padding: '12px 20px',
+                fontSize: '16px',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderColor: '#1e2c3c',
+                color: 'white',
+                backgroundColor: 'transparent',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  borderColor: '#1da1f2',
+                  backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                  color: '#1da1f2'
+                }
+              }}
             >
-              <FontAwesomeIcon icon={faSignOutAlt} />
-            </IconButton>
+              Profile
+            </Button>
+            
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<FontAwesomeIcon icon={faBookmark} />}
+              onClick={handleNavigateToSavedGames}
+              sx={{
+                borderRadius: '25px',
+                padding: '12px 20px',
+                fontSize: '16px',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderColor: '#1e2c3c',
+                color: 'white',
+                backgroundColor: 'transparent',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  borderColor: '#1da1f2',
+                  backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                  color: '#1da1f2'
+                }
+              }}
+            >
+              Saved Games
+            </Button>
+            
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<FontAwesomeIcon icon={faSignOutAlt} />}
+              onClick={handleLogout}
+              sx={{
+                borderRadius: '25px',
+                padding: '12px 20px',
+                fontSize: '16px',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderColor: '#1e2c3c',
+                color: 'white',
+                backgroundColor: 'transparent',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  borderColor: '#e0245e',
+                  backgroundColor: 'rgba(224, 36, 94, 0.1)',
+                  color: '#e0245e'
+                }
+              }}
+            >
+              Log Out
+            </Button>
           </Box>
         </Box>
 
@@ -1133,7 +1305,7 @@ const Game = () => {
           </Box>
         </Box>
 
-        {/* Trending Games */}
+        {/* Related Actions */}
         <Box 
           sx={{ 
             backgroundColor: '#172331', 
@@ -1143,31 +1315,47 @@ const Game = () => {
           }}
         >
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            Trending Games
+            Related Actions
           </Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {[1, 2, 3].map((item) => (
-              <Box 
-                key={item} 
-                sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  padding: '8px 15px',
-                  borderRadius: '10px',
-                  '&:hover': {
-                    backgroundColor: 'rgba(29, 161, 242, 0.1)',
-                  },
-                  cursor: 'pointer'
-                }}
-              >
-                <Avatar variant="rounded" sx={{ width: 40, height: 40, mr: 2 }} />
-                <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Game {item}</Typography>
-                  <Typography variant="body2" sx={{ color: '#8899a6' }}>10.{item}K players</Typography>
-                </Box>
-              </Box>
-            ))}
+            <Button 
+              variant="outlined"
+              fullWidth
+              onClick={() => navigate('/home')}
+              sx={{
+                borderColor: '#1e2c3c',
+                color: 'white',
+                borderRadius: '10px',
+                textTransform: 'none',
+                '&:hover': {
+                  borderColor: '#1da1f2',
+                  backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                }
+              }}
+            >
+              <FontAwesomeIcon icon={faHome} style={{ marginRight: '10px' }} />
+              Back to Home
+            </Button>
+            
+            <Button 
+              variant="outlined"
+              fullWidth
+              onClick={() => navigate('/giveaways')}
+              sx={{
+                borderColor: '#1e2c3c',
+                color: 'white',
+                borderRadius: '10px',
+                textTransform: 'none',
+                '&:hover': {
+                  borderColor: '#1da1f2',
+                  backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                }
+              }}
+            >
+              <FontAwesomeIcon icon={faGift} style={{ marginRight: '10px' }} />
+              Game Giveaways
+            </Button>
           </Box>
         </Box>
       </Box>      {/* Review Dialog */}

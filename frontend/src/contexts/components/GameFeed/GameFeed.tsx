@@ -1,4 +1,4 @@
-import { Box, CircularProgress, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Box, CircularProgress, Typography, } from '@mui/material';
 import { useState, useEffect } from 'react';
 import PostCard from '../PostCard/PostCard.tsx';
 import { getReviews, getBulkGames, getGameDetails } from '../../../api/funcs.ts';
@@ -21,6 +21,8 @@ interface Review {
   id: number;
   id_game: number;
   username: string;
+  user_id?: number;
+  profile_photo?: string;
   review_text: string;
   date_created: string;
   gif_url?: string;
@@ -41,8 +43,8 @@ interface Review {
 }
 
 const GameFeed = ({ refresh }: GameFeedProps) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // const theme = useTheme();
+  // const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -53,7 +55,7 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch reviews based on which tab we're on. Default to global feed.
+      // Fetch all reviews for the feed
       // For now, using 'ambos' to get all reviews
       const response = await getReviews({
         id_game: 0, // Not filtering by specific game for the feed
@@ -242,6 +244,9 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
                 userHasLiked={originalReview.user_has_liked || false}
                 repostsCount={originalReview.reposts_count || 0}
                 userHasReposted={originalReview.user_has_reposted || false}
+                profilePhoto={originalReview.profile_photo}
+                userId={originalReview.user_id}
+                onPostDeleted={fetchReviews}
               />
             </Box>
           );
@@ -276,6 +281,9 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
               userHasLiked={review.user_has_liked || false}
               repostsCount={review.reposts_count || 0}
               userHasReposted={review.user_has_reposted || false}
+              profilePhoto={review.profile_photo}
+              userId={review.user_id}
+              onPostDeleted={fetchReviews}
             />
           );
         }

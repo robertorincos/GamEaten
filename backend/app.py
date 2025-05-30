@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, make_response, request, render_template, session, flash
+from flask import Flask, request, jsonify, make_response, request, render_template, session, flash, send_from_directory
 import requests
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text, Index
@@ -13,6 +13,8 @@ from email_validator import EmailNotValidError, validate_email
 from flask_cors import CORS
 import html
 from datetime import datetime, timedelta
+from werkzeug.utils import secure_filename
+import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -24,6 +26,18 @@ if os.getenv('FLASK_ENV') != 'production':
 app.config['SQLALCHEMY_DATABASE_URI'] = f'{os.getenv("DB_URI")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.getenv('secret'))  # Fallback to 'secret' for backward compatibility
+
+# Upload configuration
+UPLOAD_FOLDER = 'uploads/profile_photos'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB (increased since no processing)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+
+# Create upload directory if it doesn't exist
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 db = SQLAlchemy(app)
 
 # Games cache table - to store game information locally
@@ -85,6 +99,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password = db.Column(db.String(255), unique=False, nullable=False)
+    profile_photo = db.Column(db.String(255), nullable=True)  # Store filename of uploaded photo
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -127,6 +142,9 @@ class Reviews(db.Model):
         # Get the actual username from the User model
         user = User.query.get(self.username)
         display_username = user.username if user else f"User {self.username}"
+        profile_photo = None
+        if user and user.profile_photo:
+            profile_photo = f'/api/profile/photo/{user.profile_photo}'
         
         # Get comment count for this review
         comment_count = Comments.query.filter_by(review_id=self.id).count()
@@ -158,6 +176,7 @@ class Reviews(db.Model):
             "id_game": self.id_game, 
             "user_id": self.username,
             "username": display_username,
+            "profile_photo": profile_photo,
             "review_text": self.review_text if self.review_text else "",
             "gif_url": self.gif_url,
             "has_text": bool(self.review_text and self.review_text.strip()),
@@ -220,6 +239,9 @@ class Comments(db.Model):
         # Get the actual username from the User model
         user = User.query.filter_by(id=self.username).first()
         display_username = user.username if user else f"User {self.username}"
+        profile_photo = None
+        if user and user.profile_photo:
+            profile_photo = f'/api/profile/photo/{user.profile_photo}'
         
         return {
             "comment_id": self.comment_id,
@@ -227,6 +249,7 @@ class Comments(db.Model):
             "review_id": self.review_id,
             "user_id": self.username,  # Keep the original ID for reference
             "username": display_username,  # Add the actual username
+            "profile_photo": profile_photo,
             "comment": self.comment if self.comment else "",  # Handle null comments
             "gif_url": self.gif_url,
             "has_text": bool(self.comment and self.comment.strip()),
@@ -257,6 +280,9 @@ class Reposts(db.Model):
         # Get the user info for the reposter
         user = User.query.filter_by(id=self.user_id).first()
         reposter_username = user.username if user else f"User {self.user_id}"
+        reposter_profile_photo = None
+        if user and user.profile_photo:
+            reposter_profile_photo = f'/api/profile/photo/{user.profile_photo}'
         
         # Get the original review data
         original_review = self.review.to_dict(current_user_id) if self.review else None
@@ -277,11 +303,39 @@ class Reposts(db.Model):
             "type": "repost",  # Identifier to distinguish from regular reviews
             "user_id": self.user_id,
             "username": reposter_username,
+            "profile_photo": reposter_profile_photo,
             "repost_text": self.repost_text,
             "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             "original_review": original_review,
             "repost_count": repost_count,
             "user_has_reposted": user_has_reposted
+        }
+
+# Saved Games table - for users to save games to their profile
+class SavedGames(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='saved_games')
+    game = db.relationship('Games', backref='saved_by_users')
+    
+    # Ensure a user can't save the same game twice
+    __table_args__ = (db.UniqueConstraint('user_id', 'game_id', name='unique_saved_game'),)
+    
+    def __repr__(self):
+        return f'<SavedGame {self.user_id} -> Game {self.game_id}>'
+
+    def to_dict(self):
+        game_info = self.game.to_dict() if self.game else None
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "game_id": self.game_id,
+            "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "game_info": game_info
         }
 
 @app.route('/api/search', methods=['POST'])
@@ -552,7 +606,15 @@ def user():
     id = request.token_data['user']
     user = User.query.filter_by(id=id).first()
     if user:
-        return jsonify({'status': user.username}), 200
+        return jsonify({
+            'status': user.username,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'profile_photo': f'/api/profile/photo/{user.profile_photo}' if user.profile_photo else None,
+                'join_date': user.created_at.strftime('%Y-%m-%d') if user.created_at else None
+            }
+        }), 200
     else:
         return jsonify({'status': 'User not found'}), 404
 
@@ -584,9 +646,12 @@ def get_user_profile(username):
             'username': user.username,
             'follower_count': follower_count,
             'following_count': following_count,
+            'review_count': review_count,
             'comment_count': review_count,  # Keep the same key for backward compatibility
             'is_following': is_following,
-            'is_own_profile': current_user_id == user.id
+            'is_own_profile': current_user_id == user.id,
+            'profile_photo': f'/api/profile/photo/{user.profile_photo}' if user.profile_photo else None,
+            'join_date': user.created_at.strftime('%Y-%m-%d') if user.created_at else None
         }
     }), 200
 
@@ -1878,17 +1943,11 @@ def get_game_news():
 def get_game_news_worth():
     """
     Fetch giveaways worth summary from GamerPower API
-    
-    Query parameters:
-    - min_value: minimum value in USD (default: 0)
-    
-    Note: This endpoint returns a summary of giveaways worth, not individual giveaways
+    Now automatically calculates total worth of all active giveaways
     """
     try:
-        min_value = request.args.get('min_value', '0')
-        
-        # Build GamerPower API URL for worth endpoint
-        url = f"https://www.gamerpower.com/api/worth?min-value={min_value}"
+        # Always use min_value of 0 to get all giveaways for total calculation
+        url = "https://www.gamerpower.com/api/worth?min-value=0"
         
         # Make request to GamerPower API
         response = requests.get(url, timeout=10)
@@ -1896,7 +1955,7 @@ def get_game_news_worth():
         
         worth_data = response.json()
         
-        # The worth endpoint returns a summary, not individual giveaways
+        # The worth endpoint returns a summary of all active giveaways
         # Format: {"active_giveaways_number": 92, "worth_estimation_usd": "374.91"}
         
         return jsonify({
@@ -1904,9 +1963,9 @@ def get_game_news_worth():
             "data": {
                 "active_giveaways_number": worth_data.get("active_giveaways_number", 0),
                 "worth_estimation_usd": worth_data.get("worth_estimation_usd", "0.00"),
-                "min_value": min_value
+                "total_savings_message": f"You could save ${worth_data.get('worth_estimation_usd', '0.00')} by claiming all {worth_data.get('active_giveaways_number', 0)} active giveaways!"
             },
-            "type": "worth_summary"
+            "type": "total_savings_summary"
         }), 200
         
     except requests.exceptions.RequestException as e:
@@ -1920,9 +1979,537 @@ def get_game_news_worth():
             "message": f"An error occurred: {str(e)}"
         }), 500
 
+@app.route('/api/game-news/complete', methods=['GET'])
+def get_complete_game_news():
+    """
+    Fetch both giveaways and worth summary in a single call for efficiency
+    
+    Query parameters:
+    - type: filter by type (e.g., 'game', 'loot', 'beta')
+    - platform: filter by platform (e.g., 'pc', 'steam', 'epic-games-store')
+    - sort-by: sort by 'date', 'value', 'popularity'
+    """
+    try:
+        # Get query parameters for giveaways
+        giveaway_type = request.args.get('type', '')
+        platform = request.args.get('platform', '')
+        sort_by = request.args.get('sort-by', 'date')
+        
+        # Build GamerPower API URL for giveaways
+        base_url = "https://www.gamerpower.com/api/giveaways"
+        params = []
+        
+        if giveaway_type:
+            params.append(f"type={giveaway_type}")
+        if platform:
+            params.append(f"platform={platform}")
+        if sort_by:
+            params.append(f"sort-by={sort_by}")
+            
+        # Construct final URL for giveaways
+        if params:
+            giveaways_url = f"{base_url}?{'&'.join(params)}"
+        else:
+            giveaways_url = base_url
+        
+        # Fetch giveaways and worth summary concurrently
+        giveaways_response = requests.get(giveaways_url, timeout=10)
+        worth_response = requests.get("https://www.gamerpower.com/api/worth?min-value=0", timeout=10)
+        
+        giveaways_response.raise_for_status()
+        worth_response.raise_for_status()
+        
+        giveaways = giveaways_response.json()
+        worth_data = worth_response.json()
+        
+        # Process giveaways data
+        processed_giveaways = []
+        for giveaway in giveaways:
+            processed_giveaway = {
+                'id': giveaway.get('id'),
+                'title': giveaway.get('title'),
+                'description': giveaway.get('description'),
+                'image': giveaway.get('image'),
+                'thumbnail': giveaway.get('thumbnail'),
+                'instructions': giveaway.get('instructions'),
+                'open_giveaway_url': giveaway.get('open_giveaway_url'),
+                'published_date': giveaway.get('published_date'),
+                'type': giveaway.get('type'),
+                'platforms': giveaway.get('platforms'),
+                'end_date': giveaway.get('end_date'),
+                'users': giveaway.get('users'),
+                'status': giveaway.get('status'),
+                'worth': giveaway.get('worth'),
+                'gamerpower_url': giveaway.get('gamerpower_url'),
+                'open_giveaway': giveaway.get('open_giveaway')
+            }
+            processed_giveaways.append(processed_giveaway)
+        
+        # Process worth data
+        worth_summary = {
+            "active_giveaways_number": worth_data.get("active_giveaways_number", 0),
+            "worth_estimation_usd": worth_data.get("worth_estimation_usd", "0.00"),
+            "total_savings_message": f"You could save ${worth_data.get('worth_estimation_usd', '0.00')} by claiming all {worth_data.get('active_giveaways_number', 0)} active giveaways!"
+        }
+        
+        return jsonify({
+            "status": "success",
+            "giveaways": {
+                "data": processed_giveaways,
+                "count": len(processed_giveaways),
+                "filters": {
+                    "type": giveaway_type,
+                    "platform": platform,
+                    "sort_by": sort_by
+                }
+            },
+            "worth_summary": worth_summary
+        }), 200
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to fetch game news: {str(e)}"
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "status": "error", 
+            "message": f"An error occurred: {str(e)}"
+        }), 500
+
+# Saved Games API Endpoints
+@app.route('/api/saved-games', methods=['GET', 'POST', 'DELETE'])
+@token_required
+def manage_saved_games():
+    """
+    Manage user's saved games
+    GET: Get user's saved games list
+    POST: Add a game to saved games
+    DELETE: Remove a game from saved games
+    """
+    try:
+        user_id = request.token_data['user']
+        user = User.query.filter_by(id=user_id).first()
+        
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+        
+        if request.method == 'GET':
+            # Get user's saved games
+            saved_games = SavedGames.query.filter_by(user_id=user_id).order_by(SavedGames.created_at.desc()).all()
+            
+            saved_games_data = []
+            for saved_game in saved_games:
+                saved_game_dict = saved_game.to_dict()
+                saved_games_data.append(saved_game_dict)
+            
+            return jsonify({
+                'status': 'success',
+                'saved_games': saved_games_data,
+                'count': len(saved_games_data)
+            }), 200
+        
+        elif request.method == 'POST':
+            # Add game to saved games
+            if not request.is_json or 'game_id' not in request.json:
+                return jsonify({'status': 'error', 'message': 'game_id is required'}), 400
+            
+            game_id = request.json['game_id']
+            
+            # Validate game_id
+            if not isinstance(game_id, int) or game_id <= 0:
+                return jsonify({'status': 'error', 'message': 'Invalid game_id'}), 400
+            
+            # Check if game exists in our database, if not fetch and cache it
+            game = Games.query.get(game_id)
+            if not game:
+                # Try to fetch game from IGDB and cache it
+                game_data = fetch_game_from_igdb(game_id)
+                if not game_data:
+                    return jsonify({'status': 'error', 'message': 'Game not found'}), 404
+                
+                # Cache the game
+                cache_game_info(db, Games, game_data)
+                game = Games.query.get(game_id)
+            
+            # Check if already saved
+            existing_saved = SavedGames.query.filter_by(user_id=user_id, game_id=game_id).first()
+            if existing_saved:
+                return jsonify({'status': 'error', 'message': 'Game already saved'}), 400
+            
+            # Save the game
+            new_saved_game = SavedGames(user_id=user_id, game_id=game_id)
+            db.session.add(new_saved_game)
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Game saved successfully',
+                'saved_game': new_saved_game.to_dict()
+            }), 201
+        
+        elif request.method == 'DELETE':
+            # Remove game from saved games
+            if not request.is_json or 'game_id' not in request.json:
+                return jsonify({'status': 'error', 'message': 'game_id is required'}), 400
+            
+            game_id = request.json['game_id']
+            
+            # Find and delete the saved game
+            saved_game = SavedGames.query.filter_by(user_id=user_id, game_id=game_id).first()
+            if not saved_game:
+                return jsonify({'status': 'error', 'message': 'Game not found in saved games'}), 404
+            
+            db.session.delete(saved_game)
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Game removed from saved games'
+            }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Operation failed: {str(e)}'}), 500
+
+@app.route('/api/saved-games/<username>', methods=['GET'])
+def get_user_saved_games(username):
+    """
+    Get another user's saved games (public view)
+    """
+    try:
+        # Find the user
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+        
+        # Get user's saved games
+        saved_games = SavedGames.query.filter_by(user_id=user.id).order_by(SavedGames.created_at.desc()).all()
+        
+        saved_games_data = []
+        for saved_game in saved_games:
+            saved_game_dict = saved_game.to_dict()
+            saved_games_data.append(saved_game_dict)
+        
+        return jsonify({
+            'status': 'success',
+            'username': username,
+            'saved_games': saved_games_data,
+            'count': len(saved_games_data)
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to fetch saved games: {str(e)}'}), 500
+
+@app.route('/api/games/search-suggestions', methods=['POST'])
+def search_game_suggestions():
+    """
+    Search for games and return suggestions for saved games feature
+    """
+    try:
+        if not request.is_json or 'query' not in request.json:
+            return jsonify({'status': 'error', 'message': 'Search query is required'}), 400
+        
+        query = request.json['query'].strip()
+        if not query or len(query) < 2:
+            return jsonify({'status': 'error', 'message': 'Query must be at least 2 characters'}), 400
+        
+        if len(query) > 100:
+            return jsonify({'status': 'error', 'message': 'Query too long'}), 400
+        
+        # Sanitize query
+        sanitized_query = query.replace('"', '')
+        
+        # Get IGDB access token
+        t = check_token()
+        token = t.json()['access_token']
+        headers = {'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 'Authorization': f'Bearer {token}'}
+        
+        # Search for games on IGDB
+        body = f'fields id,name,cover.url,rating,first_release_date; search "{sanitized_query}"; limit 10;'
+        response = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
+        games = response.json()
+        
+        if not games:
+            return jsonify({
+                'status': 'success',
+                'games': [],
+                'message': 'No games found'
+            }), 200
+        
+        # Format the response
+        game_suggestions = []
+        for game in games:
+            cover_url = None
+            if 'cover' in game and 'url' in game['cover']:
+                cover_url = game['cover']['url'].replace('t_thumb', 't_cover_big')
+                if not cover_url.startswith('http'):
+                    cover_url = f"https:{cover_url}"
+            
+            game_suggestions.append({
+                'id': game['id'],
+                'name': game['name'],
+                'cover_url': cover_url,
+                'rating': game.get('rating', 0)
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'games': game_suggestions
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Search failed: {str(e)}'}), 500
+
+@app.route('/api/games/most-reviewed-week', methods=['GET'])
+@token_required
+def get_most_reviewed_games_week():
+    """
+    Get the most reviewed games of the week with their latest review
+    """
+    try:
+        current_user_id = request.token_data['user']
+        
+        # Calculate the date range for the past week
+        one_week_ago = datetime.utcnow() - timedelta(days=7)
+        
+        # Get the most reviewed games in the past week with review counts
+        game_review_counts = db.session.query(
+            Reviews.id_game,
+            db.func.count(Reviews.id).label('review_count'),
+            db.func.max(Reviews.date_created).label('latest_review_date')
+        ).filter(
+            Reviews.date_created >= one_week_ago
+        ).group_by(
+            Reviews.id_game
+        ).order_by(
+            db.desc(db.func.count(Reviews.id))
+        ).limit(10).all()
+        
+        if not game_review_counts:
+            return jsonify({
+                'status': 'success',
+                'games': [],
+                'message': 'No reviews found in the past week'
+            }), 200
+        
+        result_games = []
+        
+        for game_count in game_review_counts:
+            game_id = game_count.id_game
+            review_count = game_count.review_count
+            
+            # Get the game information from cache
+            game_record = Games.query.get(game_id)
+            
+            # If game is not cached or needs refresh, fetch from IGDB
+            if not game_record or Games.should_refresh(game_record):
+                game_data = fetch_game_from_igdb(game_id)
+                if game_data:
+                    game_record = cache_game_info(db, Games, game_data)
+            
+            if not game_record:
+                continue  # Skip if we couldn't get game data
+            
+            # Get the latest review for this game
+            latest_review = Reviews.query.options(
+                db.joinedload(Reviews.user)
+            ).filter_by(
+                id_game=game_id
+            ).order_by(
+                Reviews.date_created.desc()
+            ).first()
+            
+            latest_review_data = None
+            if latest_review:
+                latest_review_data = latest_review.to_dict(
+                    current_user_id=current_user_id, 
+                    include_game_info=False
+                )
+            
+            # Add game information with review count and latest review
+            game_data = {
+                'game': game_record.to_dict(),
+                'review_count': review_count,
+                'latest_review': latest_review_data
+            }
+            
+            result_games.append(game_data)
+        
+        return jsonify({
+            'status': 'success',
+            'games': result_games,
+            'count': len(result_games)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error', 
+            'message': f'Failed to fetch most reviewed games: {str(e)}'
+        }), 500
+
 # Create all tables
 with app.app_context():
     db.create_all()
+
+# Helper functions for file upload
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/profile/upload', methods=['POST'])
+@token_required
+def upload_profile_photo():
+    """Upload and update user's profile photo"""
+    try:
+        user_id = request.token_data['user']
+        user = User.query.filter_by(id=user_id).first()
+        
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+        
+        if 'file' not in request.files:
+            return jsonify({'status': 'error', 'message': 'No file part'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'status': 'error', 'message': 'No selected file'}), 400
+        
+        if file and allowed_file(file.filename):
+            # Get original file extension
+            original_ext = file.filename.rsplit('.', 1)[1].lower()
+            # Generate unique filename keeping original extension
+            filename = f"{user_id}_{uuid.uuid4().hex}.{original_ext}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Delete old profile photo if exists
+            if user.profile_photo:
+                old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], user.profile_photo)
+                if os.path.exists(old_filepath):
+                    try:
+                        os.remove(old_filepath)
+                    except OSError:
+                        pass
+            
+            # Save the file directly without processing
+            file.save(filepath)
+            
+            # Update user's profile photo in database
+            user.profile_photo = filename
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Profile photo updated successfully',
+                'photo_url': f'/api/profile/photo/{filename}'
+            }), 200
+        else:
+            return jsonify({'status': 'error', 'message': 'Invalid file type. Allowed: PNG, JPG, JPEG, GIF, WEBP'}), 400
+            
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Upload failed: {str(e)}'}), 500
+
+@app.route('/api/profile/photo/<filename>')
+def get_profile_photo(filename):
+    """Serve profile photos"""
+    try:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    except FileNotFoundError:
+        return jsonify({'status': 'error', 'message': 'Photo not found'}), 404
+
+@app.route('/api/profile/update', methods=['POST'])
+@token_required  
+def update_profile():
+    """Update user profile information"""
+    try:
+        user_id = request.token_data['user']
+        user = User.query.filter_by(id=user_id).first()
+        
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+        
+        if not request.is_json:
+            return jsonify({'status': 'error', 'message': 'Content-Type must be application/json'}), 400
+        
+        data = request.json
+        updated_fields = []
+        
+        # Update username if provided
+        if 'username' in data and data['username'].strip():
+            new_username = data['username'].strip()
+            
+            # Check if username is different
+            if new_username != user.username:
+                # Check if username is already taken
+                existing_user = User.query.filter_by(username=new_username).first()
+                if existing_user:
+                    return jsonify({'status': 'error', 'message': 'Username already taken'}), 400
+                
+                # Validate username format (alphanumeric + underscore, 3-20 chars)
+                if not new_username.replace('_', '').isalnum() or len(new_username) < 3 or len(new_username) > 20:
+                    return jsonify({'status': 'error', 'message': 'Username must be 3-20 characters and contain only letters, numbers, and underscores'}), 400
+                
+                user.username = new_username
+                updated_fields.append('username')
+        
+        if updated_fields:
+            db.session.commit()
+            return jsonify({
+                'status': 'success',
+                'message': f'Profile updated successfully',
+                'updated_fields': updated_fields,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'profile_photo': f'/api/profile/photo/{user.profile_photo}' if user.profile_photo else None
+                }
+            }), 200
+        else:
+            return jsonify({'status': 'error', 'message': 'No valid fields to update'}), 400
+            
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Update failed: {str(e)}'}), 500
+
+# Delete a review (only by the owner)
+@app.route('/api/review/<int:review_id>', methods=['DELETE'])
+@token_required
+def delete_review(review_id):
+    """Delete a review - only the owner can delete their review"""
+    try:
+        user_id = request.token_data['user']
+        
+        # Find the review
+        review = Reviews.query.get(review_id)
+        if not review:
+            return jsonify({"status": "Review not found"}), 404
+        
+        # Check if the current user is the owner of the review
+        if review.username != user_id:
+            return jsonify({"status": "Unauthorized - you can only delete your own reviews"}), 403
+        
+        # Delete related data first (due to foreign key constraints)
+        # Delete likes on this review
+        Likes.query.filter_by(review_id=review_id).delete()
+        
+        # Delete comments on this review
+        Comments.query.filter_by(review_id=review_id).delete()
+        
+        # Delete reposts of this review
+        Reposts.query.filter_by(review_id=review_id).delete()
+        
+        # Finally delete the review
+        db.session.delete(review)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "Review deleted successfully"
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": f"Error deleting review: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=False)

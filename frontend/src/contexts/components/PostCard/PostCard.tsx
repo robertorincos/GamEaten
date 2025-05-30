@@ -1,10 +1,11 @@
-import { Card, CardContent, CardHeader, IconButton, Typography, Box, Avatar, Divider, TextField, Button, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, useTheme } from '@mui/material';
+import { Card, CardContent, CardHeader, IconButton, Typography, Box, Avatar, Divider, TextField, Button, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, useTheme, Menu, MenuItem } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHeart, faComment, faEllipsisH, faGamepad, faReply, faRetweet } from '@fortawesome/free-solid-svg-icons';
-import { useState } from 'react';
+import { faHeart, faComment, faEllipsisH, faGamepad, faReply, faRetweet, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { useState, useEffect } from 'react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { getReviewComments, createComment, likeUnlikeReview, repostUnrepostReview } from '../../../api/funcs';
+import { getReviewComments, createComment, likeUnlikeReview, repostUnrepostReview, deleteReview } from '../../../api/funcs';
+import { getCurrentUser } from '../../../api/auth';
 
 interface Comment {
   comment_id: number;
@@ -30,6 +31,9 @@ interface PostCardProps {
   userHasLiked?: boolean;
   repostsCount?: number;
   userHasReposted?: boolean;
+  profilePhoto?: string;
+  userId?: number;
+  onPostDeleted?: () => void;
 }
 
 const PostCard = ({ 
@@ -44,7 +48,10 @@ const PostCard = ({
   likesCount = 0,
   userHasLiked = false,
   repostsCount = 0,
-  userHasReposted = false
+  userHasReposted = false,
+  profilePhoto,
+  userId,
+  onPostDeleted
 }: PostCardProps) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -63,7 +70,44 @@ const PostCard = ({
   const [actualCommentCount, setActualCommentCount] = useState(commentCount);
   const [repostText, setRepostText] = useState('');
   const [showRepostDialog, setShowRepostDialog] = useState(false);
-    // Format date
+  
+  // Menu state for 3-dot menu
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Check if current user is the owner of this post
+  const isOwner = currentUserId !== null && userId !== undefined && currentUserId === userId;
+
+  // Get current user on component mount
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const user = await getCurrentUser();
+        if (user && user.status) {
+          // Make additional API call to get user ID like other components do
+          const response = await fetch(`/api/user/${user.status}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'success' && data.user && data.user.id) {
+              setCurrentUserId(data.user.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+      }
+    };
+    
+    fetchCurrentUser();
+  }, []);
+  
+  // Format date
   const formatDate = (dateString: string) => {
     try {
       const parsedDate = parseISO(dateString);
@@ -164,6 +208,45 @@ const PostCard = ({
   };
   const handleUserClick = () => {
     navigate(`/user/${username}`);
+  };
+
+  // Menu handlers for 3-dot menu
+  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    setMenuAnchor(e.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+  };
+
+  const handleDeleteClick = () => {
+    handleMenuClose();
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (isDeleting) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteReview(id);
+      setDeleteDialogOpen(false);
+      
+      // Call the callback to notify parent component
+      if (onPostDeleted) {
+        onPostDeleted();
+      }
+    } catch (error) {
+      console.error('Failed to delete review:', error);
+      // You might want to show an error message here
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
   };
 
   const renderComment = (comment: Comment, isReply = false) => (
@@ -318,6 +401,7 @@ const PostCard = ({
         <CardHeader
           avatar={
             <Avatar 
+              src={profilePhoto || undefined}
               sx={{ 
                 width: isMobile ? 40 : 48, 
                 height: isMobile ? 40 : 48, 
@@ -329,15 +413,18 @@ const PostCard = ({
             </Avatar>
           }
           action={
-            <IconButton 
-              sx={{ 
-                color: '#8899a6',
-                minWidth: isMobile ? '44px' : 'auto',
-                minHeight: isMobile ? '44px' : 'auto'
-              }}
-            >
-              <FontAwesomeIcon icon={faEllipsisH} />
-            </IconButton>
+            isOwner ? (
+              <IconButton 
+                onClick={handleMenuOpen}
+                sx={{ 
+                  color: '#8899a6',
+                  minWidth: isMobile ? '44px' : 'auto',
+                  minHeight: isMobile ? '44px' : 'auto'
+                }}
+              >
+                <FontAwesomeIcon icon={faEllipsisH} />
+              </IconButton>
+            ) : null
           }
           title={
             <Box sx={{ 
@@ -746,6 +833,104 @@ const PostCard = ({
             disabled={!repostText.trim()}
           >
             Repost with Comment
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 3-dot Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#172331',
+            border: '1px solid #1e2c3c',
+            borderRadius: '12px',
+            minWidth: 150
+          }
+        }}
+      >
+        <MenuItem 
+          onClick={handleDeleteClick}
+          sx={{ 
+            color: '#f44336',
+            '&:hover': { 
+              backgroundColor: 'rgba(244, 67, 54, 0.1)' 
+            },
+            fontSize: isMobile ? '14px' : '16px',
+            py: isMobile ? 1.5 : 1
+          }}
+        >
+          <FontAwesomeIcon 
+            icon={faTrash} 
+            style={{ marginRight: '12px' }} 
+          />
+          Delete Review
+        </MenuItem>
+      </Menu>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth={!isMobile}
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#172331',
+            color: 'white',
+            border: '1px solid #1e2c3c',
+            borderRadius: isMobile ? 0 : '12px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: 'white',
+          borderBottom: '1px solid #1e2c3c',
+          fontSize: isMobile ? '18px' : '20px'
+        }}>
+          Delete Review
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography sx={{ 
+            color: 'white',
+            fontSize: isMobile ? '14px' : '16px'
+          }}>
+            Are you sure you want to delete this review? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ 
+          borderTop: '1px solid #1e2c3c',
+          gap: isMobile ? 1 : 0,
+          flexDirection: isMobile ? 'column' : 'row',
+          p: isMobile ? 2 : 2
+        }}>
+          <Button 
+            onClick={handleDeleteCancel}
+            disabled={isDeleting}
+            sx={{ 
+              color: '#8899a6',
+              minHeight: isMobile ? '44px' : 'auto',
+              width: isMobile ? '100%' : 'auto'
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm}
+            disabled={isDeleting}
+            variant="contained"
+            sx={{ 
+              bgcolor: '#f44336',
+              minHeight: isMobile ? '44px' : 'auto',
+              width: isMobile ? '100%' : 'auto',
+              '&:hover': { bgcolor: '#d32f2f' },
+              '&:disabled': { bgcolor: '#666', color: '#999' }
+            }}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

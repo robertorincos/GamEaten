@@ -37,9 +37,27 @@ export interface GameWorthSummaryResponse {
   data: {
     active_giveaways_number: number;
     worth_estimation_usd: string;
-    min_value: string;
+    total_savings_message: string;
   };
-  type: 'worth_summary';
+  type: 'total_savings_summary';
+}
+
+export interface CompleteGameNewsResponse {
+  status: string;
+  giveaways: {
+    data: GameGiveaway[];
+    count: number;
+    filters: {
+      type: string;
+      platform: string;
+      sort_by: string;
+    };
+  };
+  worth_summary: {
+    active_giveaways_number: number;
+    worth_estimation_usd: string;
+    total_savings_message: string;
+  };
 }
 
 export interface GameNewsFilters {
@@ -79,25 +97,45 @@ export const gameNewsAPI = {
   },
 
   /**
-   * Get giveaways worth summary for a specific minimum value
-   * Returns summary data, not individual giveaways
+   * Get giveaways worth summary - now automatically calculates total savings
+   * No longer requires minValue parameter
    */
-  getGiveawaysWorthSummary: async (minValue: number = 0): Promise<GameWorthSummaryResponse> => {
+  getGiveawaysWorthSummary: async (): Promise<GameWorthSummaryResponse> => {
     try {
-      const response = await axiosInstance.get(`/api/game-news/worth?min_value=${minValue}`);
+      const response = await axiosInstance.get('/api/game-news/worth');
       return response.data;
     } catch (error: any) {
-      console.error('Error fetching giveaways worth summary:', error);
+      console.error('Error fetching total savings summary:', error);
       throw error;
     }
   },
 
   /**
-   * @deprecated Use getGiveawaysWorthSummary instead - this endpoint returns summary data, not individual giveaways
+   * Get both giveaways and worth summary in a single efficient call
    */
-  getValuableGiveaways: async (minValue: number = 0): Promise<GameWorthSummaryResponse> => {
-    console.warn('getValuableGiveaways is deprecated - use getGiveawaysWorthSummary instead. This endpoint returns summary data, not individual giveaways.');
-    return gameNewsAPI.getGiveawaysWorthSummary(minValue);
+  getCompleteGameNews: async (filters?: GameNewsFilters): Promise<CompleteGameNewsResponse> => {
+    try {
+      const params = new URLSearchParams();
+      
+      if (filters?.type) {
+        params.append('type', filters.type);
+      }
+      if (filters?.platform) {
+        params.append('platform', filters.platform);
+      }
+      if (filters?.sortBy) {
+        params.append('sort-by', filters.sortBy);
+      }
+      
+      const queryString = params.toString();
+      const url = queryString ? `/api/game-news/complete?${queryString}` : '/api/game-news/complete';
+      
+      const response = await axiosInstance.get(url);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching complete game news:', error);
+      throw error;
+    }
   },
 
   /**

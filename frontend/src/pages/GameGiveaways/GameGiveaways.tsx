@@ -6,7 +6,6 @@ import {
   Avatar, 
   IconButton, 
   Paper, 
-  Badge, 
   InputBase, 
   List, 
   ListItem, 
@@ -14,7 +13,6 @@ import {
   CircularProgress,
   Chip,
   Button,
-  TextField,
   MenuItem,
   Select,
   FormControl,
@@ -33,11 +31,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
-  faGlobe, 
   faGift, 
-  faBell, 
-  faEnvelope, 
-  faCog, 
   faSearch,
   faSignOutAlt,
   faGamepad,
@@ -52,7 +46,9 @@ import {
   faExternalLinkAlt,
   faFilter,
   faRefresh,
-  faTimes
+  faTimes,
+  faBookmark,
+  faTrophy
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
 import { searchGame, searchGameSuggestions } from '../../api/funcs';
@@ -66,13 +62,13 @@ const GameGiveaways = () => {
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
   
   const [username, setUsername] = useState('Guest');
+  const [currentUser, setCurrentUser] = useState<{ username: string, id: number, profile_photo?: string } | null>(null);
   const [giveaways, setGiveaways] = useState<GameGiveaway[]>([]);
   const [worthSummary, setWorthSummary] = useState<GameWorthSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [worthLoading, setWorthLoading] = useState(false);
+  const [savingsLoading, setSavingsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<GameNewsFilters>({});
-  const [minValue, setMinValue] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
@@ -93,6 +89,23 @@ const GameGiveaways = () => {
           const userData = await getCurrentUser();
           if (userData && userData.status) {
             setUsername(userData.status);
+            
+            // Fetch complete user data including profile photo
+            const response = await fetch(`/api/user/${userData.status}`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+              }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.status === 'success') {
+                setCurrentUser({ 
+                  username: data.user.username, 
+                  id: data.user.id, 
+                  profile_photo: data.user.profile_photo 
+                });
+              }
+            }
           }
         } catch (error) {
           console.error('Failed to fetch user data:', error);
@@ -113,13 +126,32 @@ const GameGiveaways = () => {
       }
     };
 
+    const fetchTotalSavings = async () => {
+      try {
+        setSavingsLoading(true);
+        const response = await gameNewsAPI.getGiveawaysWorthSummary();
+        setWorthSummary(response);
+      } catch (err: any) {
+        console.error('Failed to fetch total savings:', err);
+        // Don't set error state for savings, just log it
+      } finally {
+        setSavingsLoading(false);
+      }
+    };
+
     fetchUser();
     fetchGiveaways();
+    fetchTotalSavings();
   }, [filters]);
 
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  // Handle navigation to profile with saved games tab
+  const handleNavigateToSavedGames = () => {
+    navigate('/profile?tab=saved-games');
   };
 
   const handleSearch = async () => {
@@ -174,23 +206,9 @@ const GameGiveaways = () => {
     setFilters(updatedFilters);
   };
 
-  const fetchWorthSummary = async () => {
-    setWorthLoading(true);
-    setError(null);
-    try {
-      const response = await gameNewsAPI.getGiveawaysWorthSummary(minValue);
-      setWorthSummary(response);
-    } catch (err: any) {
-      setError(err.data?.message || 'Failed to fetch worth summary');
-    } finally {
-      setWorthLoading(false);
-    }
-  };
-
   const clearFilters = () => {
     setFilters({});
-    setMinValue(0);
-    setWorthSummary(null);
+    // Note: worthSummary is now automatically loaded and doesn't need to be cleared
   };
 
   const refreshGiveaways = async () => {
@@ -233,19 +251,21 @@ const GameGiveaways = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
   };
 
   // Review dialog handlers
   const handleOpenReviewDialog = () => {
-    if (!isAuthenticated()) {
-      navigate('/login');
-      return;
-    }
     setOpenReviewDialog(true);
   };
 
@@ -332,19 +352,6 @@ const GameGiveaways = () => {
               Home
             </Box>
             <Box 
-              onClick={() => { navigate('/global'); setMobileDrawerOpen(false); }}
-              sx={{ 
-                padding: '16px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                cursor: 'pointer',
-                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
-              }}
-            >
-              <FontAwesomeIcon icon={faGlobe} style={{ marginRight: '15px' }} />
-              Global
-            </Box>
-            <Box 
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -359,7 +366,7 @@ const GameGiveaways = () => {
               Game Giveaways
             </Box>
             <Box 
-              onClick={() => { navigate('/profile'); setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/most-reviewed'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -368,8 +375,8 @@ const GameGiveaways = () => {
                 '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
               }}
             >
-              <FontAwesomeIcon icon={faUser} style={{ marginRight: '15px' }} />
-              Profile
+              <FontAwesomeIcon icon={faTrophy} style={{ marginRight: '15px' }} />
+              Most Reviewed
             </Box>
           </Box>
           
@@ -481,17 +488,6 @@ const GameGiveaways = () => {
             </Box>
             
             <Box 
-              className="nav-item"
-              onClick={() => navigate('/global')}
-              sx={{ cursor: 'pointer' }}
-            >
-              <span className="icon">
-                <FontAwesomeIcon icon={faGlobe} />
-              </span>
-              Global
-            </Box>
-            
-            <Box 
               className="nav-item active"
               sx={{ cursor: 'pointer' }}
             >
@@ -503,13 +499,13 @@ const GameGiveaways = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/most-reviewed')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
-                <FontAwesomeIcon icon={faUser} />
+                <FontAwesomeIcon icon={faTrophy} />
               </span>
-              Profile
+              Most Reviewed
             </Box>
           </Box>
           
@@ -713,9 +709,6 @@ const GameGiveaways = () => {
                 <strong>{worthSummary.data.active_giveaways_number}</strong> active giveaways
               </Typography>
               <Typography variant="body2" sx={{ color: '#8899a6', mb: 1 }}>
-                Minimum value: <strong>${worthSummary.data.min_value}</strong>
-              </Typography>
-              <Typography variant="h6" sx={{ color: '#1da1f2' }}>
                 Total worth: <strong>${worthSummary.data.worth_estimation_usd}</strong>
               </Typography>
             </Box>
@@ -1042,53 +1035,120 @@ const GameGiveaways = () => {
             sx={{ 
               backgroundColor: '#172331', 
               borderRadius: '15px',
-              padding: '20px',
+              padding: '24px',
               mb: 3,
-              border: '1px solid #1e2c3c'
+              border: '1px solid #1e2c3c',
+              textAlign: 'center'
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar sx={{ width: 60, height: 60 }}>
+            {/* Centered Profile Photo - Bigger */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+              <Avatar 
+                src={currentUser?.profile_photo || undefined}
+                sx={{ 
+                  width: 120, 
+                  height: 120,
+                  fontSize: '48px',
+                  backgroundColor: '#1da1f2'
+                }}
+              >
                 {username?.charAt(0).toUpperCase()}
               </Avatar>
-              <Box sx={{ ml: 2 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  {username}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                  @{username.toLowerCase()}
-                </Typography>
-              </Box>
             </Box>
             
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-                onClick={() => navigate('/profile')}>
-                <FontAwesomeIcon icon={faUser} />
-              </IconButton>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-                <Badge badgeContent={4} color="error">
-                  <FontAwesomeIcon icon={faBell} />
-                </Badge>
-              </IconButton>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-                <Badge badgeContent={2} color="error">
-                  <FontAwesomeIcon icon={faEnvelope} />
-                </Badge>
-              </IconButton>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-                <FontAwesomeIcon icon={faCog} />
-              </IconButton>
-              <IconButton 
-                sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-                onClick={handleLogout}
+            {/* Centered Username with @ */}
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                color: '#8899a6',
+                fontSize: '16px',
+                fontWeight: 500,
+                mb: 3
+              }}
+            >
+              @{username?.toLowerCase()}
+            </Typography>
+            
+            {/* Three Big Buttons */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<FontAwesomeIcon icon={faUser} />}
+                onClick={() => navigate('/profile')}
+                sx={{
+                  borderRadius: '25px',
+                  padding: '12px 20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderColor: '#1e2c3c',
+                  color: 'white',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: '#1da1f2',
+                    backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                    color: '#1da1f2'
+                  }
+                }}
               >
-                <FontAwesomeIcon icon={faSignOutAlt} />
-              </IconButton>
+                Profile
+              </Button>
+              
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<FontAwesomeIcon icon={faBookmark} />}
+                onClick={handleNavigateToSavedGames}
+                sx={{
+                  borderRadius: '25px',
+                  padding: '12px 20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderColor: '#1e2c3c',
+                  color: 'white',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: '#1da1f2',
+                    backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                    color: '#1da1f2'
+                  }
+                }}
+              >
+                Saved Games
+              </Button>
+              
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<FontAwesomeIcon icon={faSignOutAlt} />}
+                onClick={handleLogout}
+                sx={{
+                  borderRadius: '25px',
+                  padding: '12px 20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderColor: '#1e2c3c',
+                  color: 'white',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: '#e0245e',
+                    backgroundColor: 'rgba(224, 36, 94, 0.1)',
+                    color: '#e0245e'
+                  }
+                }}
+              >
+                Log Out
+              </Button>
             </Box>
           </Box>
 
-          {/* Worth Summary Trigger */}
+          {/* Total Savings Card - Replaces Worth Calculator */}
           <Box 
             sx={{ 
               backgroundColor: '#172331', 
@@ -1098,48 +1158,57 @@ const GameGiveaways = () => {
               border: '1px solid #1e2c3c'
             }}
           >
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-              Worth Calculator
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <FontAwesomeIcon icon={faStar} style={{ marginRight: '10px', color: '#FFD700' }} />
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                Total Savings
+              </Typography>
+            </Box>
             
-            <TextField
-              label="Min Value ($)"
-              type="number"
-              value={minValue}
-              onChange={(e) => setMinValue(Number(e.target.value))}
-              size="small"
-              fullWidth
-              sx={{
-                mb: 2,
-                backgroundColor: '#1e2c3c',
-                borderRadius: '8px',
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': { borderColor: '#253341' },
-                  '&:hover fieldset': { borderColor: '#1da1f2' },
-                  '&.Mui-focused fieldset': { borderColor: '#1da1f2' }
-                },
-                '& .MuiInputLabel-root': { color: '#8899a6' }
-              }}
-            />
-            
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={fetchWorthSummary}
-              disabled={worthLoading}
-              sx={{
-                backgroundColor: '#1da1f2',
-                borderRadius: '20px',
-                textTransform: 'none',
-                '&:hover': { backgroundColor: '#1a91da' }
-              }}
-            >
-              {worthLoading ? (
-                <CircularProgress size={20} sx={{ color: 'white' }} />
-              ) : (
-                'Calculate Worth'
-              )}
-            </Button>
+            {savingsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                <CircularProgress size={24} sx={{ color: '#1da1f2' }} />
+              </Box>
+            ) : worthSummary ? (
+              <>
+                <Typography 
+                  variant="h4" 
+                  sx={{ 
+                    color: '#4caf50', 
+                    fontWeight: 'bold', 
+                    textAlign: 'center',
+                    mb: 1
+                  }}
+                >
+                  ${worthSummary.data.worth_estimation_usd}
+                </Typography>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    color: '#8899a6', 
+                    textAlign: 'center',
+                    mb: 2,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {worthSummary.data.total_savings_message}
+                </Typography>
+                <Box sx={{ 
+                  backgroundColor: '#1e2c3c', 
+                  borderRadius: '8px', 
+                  p: 1.5,
+                  textAlign: 'center'
+                }}>
+                  <Typography variant="caption" sx={{ color: '#8899a6' }}>
+                    <strong>{worthSummary.data.active_giveaways_number}</strong> active giveaways available
+                  </Typography>
+                </Box>
+              </>
+            ) : (
+              <Typography variant="body2" sx={{ color: '#8899a6', textAlign: 'center' }}>
+                Unable to load savings data
+              </Typography>
+            )}
           </Box>
 
           {/* Giveaway Stats */}

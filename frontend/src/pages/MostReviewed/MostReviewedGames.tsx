@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
@@ -10,17 +10,21 @@ import {
   List, 
   ListItem, 
   ListItemText, 
+  Card,
+  CardMedia,
   Button,
-  Drawer,
   useMediaQuery,
   useTheme,
+  Drawer,
   AppBar,
   Toolbar,
   Menu,
-  MenuItem,
+  MenuItem as MenuItemComponent,
   Fab,
+  Alert,
+  Skeleton,
+  Chip
 } from '@mui/material';
-import GameFeed from '../../../contexts/components/GameFeed/GameFeed.tsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
@@ -30,40 +34,43 @@ import {
   faGamepad,
   faUser,
   faSpinner,
+  faStar,
   faPencilAlt,
   faBars,
   faEllipsisV,
   faBookmark,
-  faTrophy
+  faTrophy,
+  faRefresh
 } from '@fortawesome/free-solid-svg-icons';
-import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth.ts';
-import { searchGame, searchGameSuggestions } from '../../../api/funcs.ts';
-import ReviewDialog from '../../../contexts/components/Review/review.tsx';
+import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
+import { searchGame, searchGameSuggestions, getMostReviewedGamesWeek } from '../../api/funcs';
+import ReviewDialog from '../../contexts/components/Review/review';
+import PostCard from '../../contexts/components/PostCard/PostCard';
 
-export const HomePage = () => {
+const MostReviewedGames = () => {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
   
-  const [activeTab, setActiveTab] = useState('following');
   const [username, setUsername] = useState('Guest');
   const [currentUser, setCurrentUser] = useState<{ username: string, id: number, profile_photo?: string } | null>(null);
+  const [mostReviewedGames, setMostReviewedGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
-  const [, setSearchResults] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const searchTimeoutRef = useRef<number | null>(null);
-  const [openReviewDialog, setOpenReviewDialog] = useState(false);
-  const [refreshFeed, setRefreshFeed] = useState(false);
   
   // Mobile-specific state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
-  const navigate = useNavigate();
+  // Review dialog state
+  const [openReviewDialog, setOpenReviewDialog] = useState(false);
 
+  // Fetch user data and most reviewed games
   useEffect(() => {
     const fetchUser = async () => {
       if (isAuthenticated()) {
@@ -91,27 +98,35 @@ export const HomePage = () => {
           }
         } catch (error) {
           console.error('Failed to fetch user data:', error);
-        } finally {
-          setLoading(false);
         }
-      } else {
+      }
+    };
+
+    const fetchMostReviewedGames = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await getMostReviewedGamesWeek();
+        setMostReviewedGames(response.games);
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to fetch most reviewed games');
+      } finally {
         setLoading(false);
       }
     };
 
     fetchUser();
+    fetchMostReviewedGames();
   }, []);
-
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    if (isMobile) {
-      setMobileDrawerOpen(false);
-    }
-  };
 
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  // Handle navigation to profile with saved games tab
+  const handleNavigateToSavedGames = () => {
+    navigate('/profile?tab=saved-games');
   };
 
   const handleSearch = async () => {
@@ -122,8 +137,6 @@ export const HomePage = () => {
       const gameId = await searchGame({ query: searchQuery });
       
       if (gameId) {
-        console.log(`Found game with ID: ${gameId}`);
-        setSearchResults(gameId);
         navigate(`/game/${gameId}`);
       }
     } catch (error) {
@@ -137,28 +150,20 @@ export const HomePage = () => {
     const query = e.target.value;
     setSearchQuery(query);
     
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
     if (query.trim().length >= 2) {
       setSearchLoading(true);
-      
-      searchTimeoutRef.current = window.setTimeout(async () => {
-        try {
-          const results = await searchGameSuggestions({ query });
-          setSuggestions(results);
-          setShowSuggestions(true);
-        } catch (error) {
-          console.error('Error fetching suggestions:', error);
-        } finally {
-          setSearchLoading(false);
-        }
-      }, 500);
+      try {
+        const results = await searchGameSuggestions({ query });
+        setSuggestions(results);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
+      } finally {
+        setSearchLoading(false);
+      }
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
-      setSearchLoading(false);
     }
   };
 
@@ -166,29 +171,22 @@ export const HomePage = () => {
     setShowSuggestions(false);
     navigate(`/game/${gameId}`);
   };
-  
+
   const handleClickOutside = () => {
     setShowSuggestions(false);
   };
 
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleOpenReviewDialog = () => {
-    if (!isAuthenticated()) {
-      navigate('/login');
-      return;
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getMostReviewedGamesWeek();
+      setMostReviewedGames(response.games);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to fetch most reviewed games');
+    } finally {
+      setLoading(false);
     }
-    setOpenReviewDialog(true);
-  };
-
-  const handleCloseReviewDialog = () => {
-    setOpenReviewDialog(false);
   };
 
   const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -199,9 +197,16 @@ export const HomePage = () => {
     setUserMenuAnchor(null);
   };
 
-  // Handle navigation to profile with saved games tab
-  const handleNavigateToSavedGames = () => {
-    navigate('/profile?tab=saved-games');
+  const handleOpenReviewDialog = () => {
+    if (!isAuthenticated()) {
+      navigate('/');
+      return;
+    }
+    setOpenReviewDialog(true);
+  };
+
+  const handleCloseReviewDialog = () => {
+    setOpenReviewDialog(false);
   };
 
   // Navigation items component for reuse
@@ -236,8 +241,11 @@ export const HomePage = () => {
       }}
     >
       <Box 
-        className={`nav-item ${activeTab === 'following' ? 'active' : ''}`}
-        onClick={() => handleTabChange('following')}
+        className="nav-item"
+        onClick={() => {
+          navigate('/home');
+          if (inDrawer) setMobileDrawerOpen(false);
+        }}
       >
         <span className="icon">
           <FontAwesomeIcon icon={faHome} />
@@ -259,11 +267,7 @@ export const HomePage = () => {
       </Box>
 
       <Box 
-        className="nav-item"
-        onClick={() => {
-          navigate('/most-reviewed');
-          if (inDrawer) setMobileDrawerOpen(false);
-        }}
+        className="nav-item active"
       >
         <span className="icon">
           <FontAwesomeIcon icon={faTrophy} />
@@ -293,9 +297,9 @@ export const HomePage = () => {
         </IconButton>
         
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '8px' }} />
+          <FontAwesomeIcon icon={faTrophy} style={{ marginRight: '8px' }} />
           <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
-            GamEaten
+            Most Reviewed
           </Typography>
         </Box>
         
@@ -309,6 +313,11 @@ export const HomePage = () => {
       </Toolbar>
     </AppBar>
   );
+
+  const formatCoverUrl = (url?: string) => {
+    if (!url) return null;
+    return url.startsWith('//') ? `https:${url}` : url;
+  };
 
   return (
     <Box sx={{ 
@@ -385,14 +394,14 @@ export const HomePage = () => {
           }
         }}
       >
-        <MenuItem onClick={() => { navigate('/profile'); handleUserMenuClose(); }}>
+        <MenuItemComponent onClick={() => { navigate('/profile'); handleUserMenuClose(); }}>
           <FontAwesomeIcon icon={faUser} style={{ marginRight: '10px' }} />
           Profile
-        </MenuItem>
-        <MenuItem onClick={() => { handleLogout(); handleUserMenuClose(); }}>
+        </MenuItemComponent>
+        <MenuItemComponent onClick={() => { handleLogout(); handleUserMenuClose(); }}>
           <FontAwesomeIcon icon={faSignOutAlt} style={{ marginRight: '10px' }} />
           Logout
-        </MenuItem>
+        </MenuItemComponent>
       </Menu>
 
       {/* Left Column - Navigation (Desktop/Tablet only) */}
@@ -459,93 +468,226 @@ export const HomePage = () => {
               position: 'sticky',
               top: 0,
               backgroundColor: '#0e1621',
-              zIndex: 10
+              zIndex: 10,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}
           >
-            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: isTablet ? '1.1rem' : '1.25rem' }}>
-              {activeTab === 'following' ? 'Following' : 'Home'}
-            </Typography>
-          </Box>
-        )}
-        
-        {/* Search bar for mobile */}
-        {isMobile && (
-          <Box sx={{ p: 2, position: 'relative' }}>
-            <Paper
-              sx={{
-                p: '2px 4px',
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: '30px',
-                backgroundColor: '#172331',
-                border: '1px solid #1e2c3c'
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <FontAwesomeIcon icon={faTrophy} style={{ marginRight: '10px', color: '#1da1f2' }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, fontSize: isTablet ? '1.1rem' : '1.25rem' }}>
+                Most Reviewed This Week
+              </Typography>
+            </Box>
+            <IconButton 
+              onClick={handleRefresh}
+              sx={{ 
+                color: '#1da1f2',
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
               }}
             >
-              <IconButton 
-                sx={{ p: '10px', color: '#8899a6' }}
-                onClick={handleSearch}
-                disabled={searchLoading}
-              >
-                <FontAwesomeIcon icon={searchLoading ? faSpinner : faSearch} spin={searchLoading} />
-              </IconButton>
-              <InputBase
-                sx={{ ml: 1, flex: 1, color: 'white' }}
-                placeholder="Search GamEaten"
-                value={searchQuery}
-                onChange={handleSearchInputChange}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                onBlur={() => setTimeout(() => handleClickOutside(), 200)}
-              />
-            </Paper>
-
-            {showSuggestions && suggestions.length > 0 && (
-              <Paper 
-                sx={{ 
-                  position: 'absolute', 
-                  width: 'calc(100% - 32px)',
-                  left: 16,
-                  right: 16,
-                  zIndex: 20, 
-                  mt: 1, 
-                  backgroundColor: '#172331',
-                  border: '1px solid #1e2c3c',
-                  borderRadius: '10px',
-                  maxHeight: '300px',
-                  overflowY: 'auto'
-                }}
-              >
-                <List>
-                  {suggestions.map((game) => (
-                    <ListItem 
-                      key={game.id} 
-                      onClick={() => handleSelectSuggestion(game.id)}
-                      sx={{ 
-                        '&:hover': { 
-                          backgroundColor: 'rgba(29, 161, 242, 0.1)'
-                        },
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <ListItemText 
-                        primary={game.name} 
-                        primaryTypographyProps={{ 
-                          sx: { color: 'white' }
-                        }} 
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            )}
+              <FontAwesomeIcon icon={faRefresh} />
+            </IconButton>
           </Box>
-        )}        
-        
+        )}
+
+        {/* Main Content */}
         <Box sx={{ p: isMobile ? 1 : 2 }}>
-          <GameFeed key={`feed-${refreshFeed}`}/>
+          {loading ? (
+            <Box>
+              {[...Array(5)].map((_, index) => (
+                <Card 
+                  key={index}
+                  sx={{ 
+                    mb: 2, 
+                    backgroundColor: '#172331', 
+                    border: '1px solid #1e2c3c',
+                    borderRadius: '15px'
+                  }}
+                >
+                  <Box sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <Skeleton variant="rectangular" width={80} height={100} sx={{ bgcolor: '#1e2c3c', borderRadius: '8px' }} />
+                      <Box sx={{ flex: 1 }}>
+                        <Skeleton variant="text" width="60%" sx={{ bgcolor: '#1e2c3c', mb: 1 }} />
+                        <Skeleton variant="text" width="40%" sx={{ bgcolor: '#1e2c3c', mb: 2 }} />
+                        <Skeleton variant="rectangular" height={60} sx={{ bgcolor: '#1e2c3c', borderRadius: '8px' }} />
+                      </Box>
+                    </Box>
+                  </Box>
+                </Card>
+              ))}
+            </Box>
+          ) : error ? (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                backgroundColor: '#2c1810', 
+                color: '#ff6b6b',
+                border: '1px solid #3c2415',
+                '& .MuiAlert-icon': { color: '#ff6b6b' }
+              }}
+            >
+              {error}
+            </Alert>
+          ) : mostReviewedGames.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <FontAwesomeIcon icon={faTrophy} size="3x" style={{ color: '#8899a6', marginBottom: '16px' }} />
+              <Typography variant="h6" sx={{ color: '#8899a6', mb: 1 }}>
+                No games reviewed this week yet
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                Be the first to review a game this week!
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {mostReviewedGames.map((gameData, index) => (
+                <Card 
+                  key={gameData.game.id}
+                  sx={{ 
+                    backgroundColor: '#172331', 
+                    border: '1px solid #1e2c3c',
+                    borderRadius: '15px',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 20px rgba(29, 161, 242, 0.1)',
+                      borderColor: '#1da1f2'
+                    }
+                  }}
+                >
+                  <Box sx={{ p: 3 }}>
+                    {/* Ranking Badge */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Chip
+                        label={`#${index + 1}`}
+                        sx={{
+                          backgroundColor: index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#1da1f2',
+                          color: index < 3 ? '#000' : '#fff',
+                          fontWeight: 'bold',
+                          fontSize: '14px'
+                        }}
+                      />
+                      <Typography variant="body2" sx={{ color: '#8899a6', ml: 1 }}>
+                        {gameData.review_count} review{gameData.review_count !== 1 ? 's' : ''} this week
+                      </Typography>
+                    </Box>
+
+                    {/* Game Info */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                      {gameData.game.cover_url && (
+                        <Box 
+                          sx={{ 
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s ease',
+                            '&:hover': { transform: 'scale(1.05)' }
+                          }}
+                          onClick={() => navigate(`/game/${gameData.game.id}`)}
+                        >
+                          <CardMedia
+                            component="img"
+                            image={formatCoverUrl(gameData.game.cover_url) ?? undefined}
+                            alt={gameData.game.name}
+                            sx={{
+                              width: 80,
+                              height: 100,
+                              borderRadius: '8px',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        </Box>
+                      )}
+                      
+                      <Box sx={{ flex: 1 }}>
+                        <Typography 
+                          variant="h6" 
+                          sx={{ 
+                            color: 'white', 
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            '&:hover': { color: '#1da1f2' },
+                            transition: 'color 0.2s ease'
+                          }}
+                          onClick={() => navigate(`/game/${gameData.game.id}`)}
+                        >
+                          {gameData.game.name}
+                        </Typography>
+                        
+                        {gameData.game.rating && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                            <FontAwesomeIcon icon={faStar} style={{ color: '#ffd700', marginRight: '4px' }} />
+                            <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                              {Math.round(gameData.game.rating)}/100
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        {gameData.game.summary && (
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: '#8899a6', 
+                              mt: 1,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            {gameData.game.summary}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+
+                    {/* Latest Review */}
+                    {gameData.latest_review && (
+                      <Box sx={{ 
+                        backgroundColor: '#0e1621', 
+                        borderRadius: '10px', 
+                        p: 2,
+                        border: '1px solid #1e2c3c'
+                      }}>
+                        <Typography variant="subtitle2" sx={{ color: '#1da1f2', mb: 1, fontWeight: 600 }}>
+                          Latest Review:
+                        </Typography>
+                        
+                        <PostCard
+                          id={gameData.latest_review.id}
+                          username={gameData.latest_review.username}
+                          text={gameData.latest_review.review_text}
+                          date={gameData.latest_review.date_created}
+                          gameId={gameData.game.id}
+                          gameName={gameData.game.name}
+                          gifUrl={gameData.latest_review.gif_url}
+                          commentType={
+                            gameData.latest_review.has_text && gameData.latest_review.has_gif 
+                              ? 'mixed' 
+                              : gameData.latest_review.has_gif 
+                                ? 'gif' 
+                                : 'text'
+                          }
+                          commentCount={gameData.latest_review.comment_count}
+                          likesCount={gameData.latest_review.likes_count}
+                          userHasLiked={gameData.latest_review.user_has_liked}
+                          repostsCount={gameData.latest_review.reposts_count}
+                          userHasReposted={gameData.latest_review.user_has_reposted}
+                          profilePhoto={gameData.latest_review.profile_photo}
+                        />
+                      </Box>
+                    )}
+                  </Box>
+                </Card>
+              ))}
+            </Box>
+          )}
         </Box>
       </Box>
 
-      {/* Right Column - User Profile & Recommendations (Desktop only) */}
+      {/* Right Column - Search & User Profile (Desktop only) */}
       {!isMobile && !isTablet && (
         <Box 
           sx={{ 
@@ -647,7 +789,7 @@ export const HomePage = () => {
                   backgroundColor: '#1da1f2'
                 }}
               >
-                {loading ? '?' : username?.charAt(0).toUpperCase()}
+                {username?.charAt(0).toUpperCase()}
               </Avatar>
             </Box>
             
@@ -661,7 +803,7 @@ export const HomePage = () => {
                 mb: 3
               }}
             >
-              @{loading ? '...' : username?.toLowerCase()}
+              @{username?.toLowerCase()}
             </Typography>
             
             {/* Three Big Buttons */}
@@ -770,11 +912,11 @@ export const HomePage = () => {
         open={openReviewDialog} 
         onClose={handleCloseReviewDialog}
         onReviewSubmitted={() => {
-          setRefreshFeed(prev => !prev);
+          // Optionally refresh the data when a new review is submitted
         }}
       />
     </Box>
   );
 };
 
-export default HomePage;
+export default MostReviewedGames; 

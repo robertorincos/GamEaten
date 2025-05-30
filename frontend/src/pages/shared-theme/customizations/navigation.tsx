@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Theme as MuiTheme, alpha, Components, CSSObject } from '@mui/material/styles';
 import { SvgIconProps } from '@mui/material/SvgIcon';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 // Extend the MUI Theme type to include the vars property
 interface Theme extends MuiTheme {
@@ -12,7 +13,6 @@ import { dividerClasses } from '@mui/material/Divider';
 import { menuItemClasses } from '@mui/material/MenuItem';
 import { selectClasses } from '@mui/material/Select';
 import { tabClasses } from '@mui/material/Tab';
-import UnfoldMoreRoundedIcon from '@mui/icons-material/UnfoldMoreRounded';
 import { gray, brand } from '../themePrimitives';
 
 /* eslint-disable import/prefer-default-export */
@@ -65,7 +65,7 @@ export const navigationCustomizations: Components<Theme> = {
   MuiSelect: {
     defaultProps: {
       IconComponent: React.forwardRef<SVGSVGElement, SvgIconProps>((props, ref) => (
-        <UnfoldMoreRoundedIcon fontSize="small" {...props} ref={ref} />
+        <ExpandMoreIcon fontSize="small" {...props} ref={ref} />
       )),
     },
     styleOverrides: {

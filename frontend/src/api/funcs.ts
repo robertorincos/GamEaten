@@ -687,3 +687,63 @@ export const getSearchSuggestions = async (searchQuery: SearchSuggestionsQuery):
         return { suggestions: [], query: searchQuery.query };
     }
 };
+
+/**
+ * Get the most reviewed games of the week with their latest review
+ */
+export const getMostReviewedGamesWeek = async (): Promise<{
+    status: string;
+    games: Array<{
+        game: {
+            id: number;
+            name: string;
+            cover_url?: string;
+            rating?: number;
+            summary?: string;
+            release_date?: string;
+            platforms?: string[];
+            artwork_urls?: string[];
+        };
+        review_count: number;
+        latest_review?: {
+            id: number;
+            username: string;
+            profile_photo?: string;
+            review_text: string;
+            date_created: string;
+            gif_url?: string;
+            has_text: boolean;
+            has_gif: boolean;
+            comment_count: number;
+            likes_count: number;
+            user_has_liked: boolean;
+            reposts_count: number;
+            user_has_reposted: boolean;
+        };
+    }>;
+    count: number;
+    message?: string;
+}> => {
+    try {
+        const response = await axiosInstance.get('/api/games/most-reviewed-week');
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getMostReviewedGamesWeek:', error);
+        throw error;
+    }
+};
+
+/**
+ * Delete a review (only the owner can delete their review)
+ */
+export const deleteReview = async (reviewId: number): Promise<{
+    status: string;
+}> => {
+    try {
+        const response = await axiosInstance.delete(`/api/review/${reviewId}`);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - deleteReview:', error);
+        throw error;
+    }
+};

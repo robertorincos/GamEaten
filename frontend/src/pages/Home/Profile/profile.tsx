@@ -5,7 +5,6 @@ import {
   Avatar, 
   IconButton, 
   Paper, 
-  Badge, 
   InputBase, 
   List, 
   ListItem, 
@@ -21,16 +20,16 @@ import {
   Toolbar,
   Menu,
   MenuItem,
-  Fab
+  Fab,
+  Card,
+  CardMedia,
+  CardContent,
+  Chip
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
-  faGlobe, 
   faGift, 
-  faBell, 
-  faEnvelope, 
-  faCog, 
   faSearch,
   faSignOutAlt,
   faGamepad,
@@ -42,19 +41,24 @@ import {
   faUserPlus,
   faUserMinus,
   faBars,
-  faEllipsisV
+  faEllipsisV,
+  faBookmark,
+  faTrophy
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth';
 import { searchGame, searchGameSuggestions, getReviews } from '../../../api/funcs';
 import { ReviewDialog } from '../../../contexts/components/Review/review';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import PostCard from '../../../contexts/components/PostCard/PostCard.tsx';
+import EditProfileDialog from '../../../contexts/components/EditProfile/EditProfileDialog';
 
 
 interface Comment {
   id: number;
   id_game: number;
   username: string;
+  user_id?: number;
+  profile_photo?: string;
   comment: string;
   date_created: string;
   gif_url?: string;
@@ -81,11 +85,25 @@ interface UserProfile {
   is_following: boolean;
   is_own_profile: boolean;
   join_date?: string;
+  profile_photo?: string;
 }
 
 interface GameResult {
   id: number;
   name: string;
+}
+
+interface SavedGame {
+  id: number;
+  game_id: number;
+  created_at: string;
+  game_info: {
+    id: number;
+    name: string;
+    cover_url?: string;
+    rating?: number;
+    summary?: string;
+  };
 }
 
 const ProfilePage = () => {
@@ -94,6 +112,7 @@ const ProfilePage = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('Guest');
@@ -122,11 +141,14 @@ const ProfilePage = () => {
   // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
 
+  // Edit profile dialog state
+  const [openEditProfileDialog, setOpenEditProfileDialog] = useState(false);
+
   // New state for game names
   const [gameNames, setGameNames] = useState<{ [id: number]: string }>({});
 
   // Add state for logged-in user
-  const [currentUser, setCurrentUser] = useState<{ username: string, id: number } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ username: string, id: number, profile_photo?: string } | null>(null);
 
   // Add state for logged-in user's stats
   const [currentUserStats, setCurrentUserStats] = useState<UserStats>({
@@ -139,6 +161,43 @@ const ProfilePage = () => {
 
   // Add loading state for game names
   const [loadingGameNames, setLoadingGameNames] = useState(false);
+
+  // Add state for saved games
+  const [savedGames, setSavedGames] = useState<SavedGame[]>([]);
+  const [savedGamesLoading, setSavedGamesLoading] = useState(false);
+
+  // Function to fetch saved games
+  const fetchSavedGames = async (targetUsername?: string) => {
+    try {
+      setSavedGamesLoading(true);
+      
+      let url = '/api/saved-games';
+      const headers: HeadersInit = {};
+      
+      if (targetUsername) {
+        // Viewing another user's profile - use public endpoint
+        url = `/api/saved-games/${targetUsername}`;
+      } else {
+        // Viewing own profile - use authenticated endpoint
+        headers['Authorization'] = `Bearer ${localStorage.getItem('authToken')}`;
+      }
+
+      const response = await fetch(url, { headers });
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        setSavedGames(data.saved_games || []);
+      } else {
+        console.error('Failed to fetch saved games:', data.message);
+        setSavedGames([]);
+      }
+    } catch (error) {
+      console.error('Error fetching saved games:', error);
+      setSavedGames([]);
+    } finally {
+      setSavedGamesLoading(false);
+    }
+  };
 
   // Fetch current user data on mount
   useEffect(() => {
@@ -156,7 +215,7 @@ const ProfilePage = () => {
             if (response.ok) {
               const data = await response.json();
               if (data.status === 'success') {
-                setCurrentUser({ username: data.user.username, id: data.user.id });
+                setCurrentUser({ username: data.user.username, id: data.user.id, profile_photo: data.user.profile_photo });
                 setCurrentUserStats({
                   totalReviews: data.user.review_count,
                   totalGames: 0,
@@ -218,7 +277,8 @@ const ProfilePage = () => {
               review_count: currentUserStats.totalReviews,
               is_following: false,
               is_own_profile: true,
-              join_date: currentUserStats.joinDate
+              join_date: currentUserStats.joinDate,
+              profile_photo: currentUser.profile_photo
             });
             setUserStats(currentUserStats);
           }
@@ -253,6 +313,11 @@ const ProfilePage = () => {
         // Set the username for display
         if (viewedUsername && isMounted) {
           setUsername(viewedUsername);
+        }
+
+        // Fetch saved games for the user being viewed
+        if (viewedUsername && isMounted) {
+          await fetchSavedGames(profileUsername ? profileUsername : undefined);
         }
 
         // Fetch user's comments (for the profile being viewed)
@@ -416,6 +481,23 @@ const ProfilePage = () => {
     setOpenReviewDialog(false);
   };
 
+  // Edit profile dialog handlers
+  const handleOpenEditProfileDialog = () => {
+    setOpenEditProfileDialog(true);
+  };
+
+  const handleCloseEditProfileDialog = () => {
+    setOpenEditProfileDialog(false);
+  };
+
+  const handleProfileUpdated = (updatedUser: any) => {
+    setCurrentUser(updatedUser);
+    // If we're viewing our own profile, update the displayed username
+    if (isOwnProfile) {
+      setUsername(updatedUser.username);
+    }
+  };
+
   // const formatDate = (dateString: string) => {
   //   try {
   //     return new Date(dateString).toLocaleDateString();
@@ -449,6 +531,26 @@ const ProfilePage = () => {
       console.error('Failed to follow/unfollow:', error);
     }
   };
+
+  // Add a function to handle tab navigation
+  const handleNavigateToTab = (tabIndex: number) => {
+    setActiveTab(tabIndex);
+    if (tabIndex === 1) {
+      navigate('/profile?tab=saved-games');
+    } else {
+      navigate('/profile');
+    }
+  };
+
+  // Check URL parameters for tab navigation
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'saved-games') {
+      setActiveTab(1);
+    } else {
+      setActiveTab(0);
+    }
+  }, [searchParams]);
 
   return (
     <Box sx={{ 
@@ -534,28 +636,37 @@ const ProfilePage = () => {
               Home
             </Box>
             <Box 
-              onClick={() => { navigate('/profile'); setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/giveaways'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
                 alignItems: 'center',
                 cursor: 'pointer',
-                backgroundColor: '#1da1f2',
-                color: '#fff'
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
               }}
             >
-              <FontAwesomeIcon icon={faUser} style={{ marginRight: '15px' }} />
-              Profile
+              <FontAwesomeIcon icon={faGift} style={{ marginRight: '15px' }} />
+              Game Giveaways
+            </Box>
+            <Box 
+              onClick={() => { navigate('/most-reviewed'); setMobileDrawerOpen(false); }}
+              sx={{ 
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
+              }}
+            >
+              <FontAwesomeIcon icon={faTrophy} style={{ marginRight: '15px' }} />
+              Most Reviewed
             </Box>
           </Box>
           
           <Button 
             variant="contained" 
             fullWidth 
-            onClick={() => {
-              setOpenReviewDialog(true);
-              setMobileDrawerOpen(false);
-            }}
+            onClick={handleOpenReviewDialog}
             sx={{
               mt: 3,
               py: 1.5,
@@ -658,17 +769,6 @@ const ProfilePage = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => navigate('/global')}
-              sx={{ cursor: 'pointer' }}
-            >
-              <span className="icon">
-                <FontAwesomeIcon icon={faGlobe} />
-              </span>
-              Global
-            </Box>
-            
-            <Box 
-              className="nav-item"
               onClick={() => navigate('/giveaways')}
               sx={{ cursor: 'pointer' }}
             >
@@ -679,14 +779,14 @@ const ProfilePage = () => {
             </Box>
             
             <Box 
-              className="nav-item active"
-              onClick={() => navigate('/profile')}
+              className="nav-item"
+              onClick={() => navigate('/most-reviewed')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
-                <FontAwesomeIcon icon={faUser} />
+                <FontAwesomeIcon icon={faTrophy} />
               </span>
-              Profile
+              Most Reviewed
             </Box>
           </Box>
           
@@ -757,6 +857,7 @@ const ProfilePage = () => {
                 }}
               >
                 <Avatar 
+                  src={isOwnProfile ? currentUser?.profile_photo : userProfile?.profile_photo}
                   sx={{ 
                     width: '100%', 
                     height: '100%', 
@@ -782,6 +883,7 @@ const ProfilePage = () => {
                   <Button 
                     variant="outlined" 
                     startIcon={<FontAwesomeIcon icon={faEdit} />}
+                    onClick={handleOpenEditProfileDialog}
                     sx={{ 
                       borderRadius: '30px', 
                       textTransform: 'none',
@@ -869,8 +971,7 @@ const ProfilePage = () => {
                 }}
               >
                 <Tab label="Reviews" />
-                <Tab label="Games" />
-                <Tab label="Activity" />
+                <Tab label="Saved Games" />
               </Tabs>
             </Box>
 
@@ -903,6 +1004,12 @@ const ProfilePage = () => {
                         commentType={commentType}
                         likesCount={comment.likes_count || 0}
                         userHasLiked={comment.user_has_liked || false}
+                        profilePhoto={comment.profile_photo}
+                        userId={comment.user_id}
+                        onPostDeleted={() => {
+                          // Refresh comments after deletion
+                          setUserComments(prev => prev.filter(c => c.id !== comment.id));
+                        }}
                       />
                     );
                   })
@@ -916,21 +1023,111 @@ const ProfilePage = () => {
               </Box>
             )}
 
-            {/* Games Tab */}
+            {/* Saved Games Tab */}
             {activeTab === 1 && (
-              <Box sx={{ p: 2, textAlign: 'center' }}>
-                <Typography variant="body1" sx={{ color: '#8899a6', py: 4 }}>
-                  Games collection feature coming soon!
-                </Typography>
-              </Box>
-            )}
-
-            {/* Activity Tab */}
-            {activeTab === 2 && (
-              <Box sx={{ p: 2, textAlign: 'center' }}>
-                <Typography variant="body1" sx={{ color: '#8899a6', py: 4 }}>
-                  Activity feed feature coming soon!
-                </Typography>
+              <Box sx={{ p: 2 }}>
+                {savedGamesLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : savedGames.length > 0 ? (
+                  <>
+                    <Typography variant="body1" sx={{ color: '#8899a6', mb: 3 }}>
+                      {savedGames.length} saved game{savedGames.length !== 1 ? 's' : ''}
+                    </Typography>
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                      gap: 2
+                    }}>
+                      {savedGames.map((savedGame) => (
+                        <Card
+                          key={savedGame.id}
+                          onClick={() => navigate(`/game/${savedGame.game_id}`)}
+                          sx={{
+                            backgroundColor: '#0e1621',
+                            border: '1px solid #1e2c3c',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            '&:hover': {
+                              borderColor: '#1da1f2',
+                              transform: 'translateY(-2px)'
+                            }
+                          }}
+                        >
+                          <CardMedia
+                            component="img"
+                            sx={{
+                              height: 240,
+                              objectFit: 'cover',
+                              backgroundColor: '#172331'
+                            }}
+                            image={savedGame.game_info.cover_url || '/placeholder-game.png'}
+                            alt={savedGame.game_info.name}
+                          />
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Typography 
+                              variant="subtitle2" 
+                              sx={{ 
+                                fontWeight: 600, 
+                                mb: 1,
+                                color: 'white',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: '0.9rem'
+                              }}
+                            >
+                              {savedGame.game_info.name}
+                            </Typography>
+                            {savedGame.game_info.rating && (
+                              <Chip
+                                label={`${Math.round(savedGame.game_info.rating)}/100`}
+                                size="small"
+                                sx={{
+                                  backgroundColor: '#1da1f2',
+                                  color: 'white',
+                                  fontSize: '0.75rem',
+                                  height: '20px'
+                                }}
+                              />
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                  </>
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <FontAwesomeIcon 
+                      icon={faBookmark} 
+                      size="3x" 
+                      style={{ color: '#8899a6', marginBottom: '16px' }} 
+                    />
+                    <Typography variant="h6" sx={{ color: '#8899a6', mb: 1 }}>
+                      {isOwnProfile ? 'No saved games yet' : `${username} hasn't saved any games yet`}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#8899a6', mb: 3 }}>
+                      {isOwnProfile 
+                        ? 'Start building your game collection by searching and adding games' 
+                        : 'Check back later to see their game collection'
+                      }
+                    </Typography>
+                    {isOwnProfile && (
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate('/saved-games')}
+                        sx={{
+                          backgroundColor: '#1da1f2',
+                          '&:hover': { backgroundColor: '#1a91da' }
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faBookmark} style={{ marginRight: '8px' }} />
+                        Add Your First Game
+                      </Button>
+                    )}
+                  </Box>
+                )}
               </Box>
             )}
           </>
@@ -1024,45 +1221,116 @@ const ProfilePage = () => {
             sx={{ 
               backgroundColor: '#172331', 
               borderRadius: '15px',
-              padding: '20px',
+              padding: '24px',
               mb: 3,
-              border: '1px solid #1e2c3c'
+              border: '1px solid #1e2c3c',
+              textAlign: 'center'
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar sx={{ width: 60, height: 60 }}>
+            {/* Centered Profile Photo - Bigger */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+              <Avatar 
+                src={currentUser?.profile_photo || undefined}
+                sx={{ 
+                  width: 120, 
+                  height: 120,
+                  fontSize: '48px',
+                  backgroundColor: '#1da1f2'
+                }}
+              >
                 {currentUser?.username?.charAt(0).toUpperCase()}
               </Avatar>
-              <Box sx={{ ml: 2 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  {currentUser?.username}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                  @{currentUser?.username?.toLowerCase()}
-                </Typography>
-              </Box>
             </Box>
             
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-                <Badge badgeContent={4} color="error">
-                  <FontAwesomeIcon icon={faBell} />
-                </Badge>
-              </IconButton>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-                <Badge badgeContent={2} color="error">
-                  <FontAwesomeIcon icon={faEnvelope} />
-                </Badge>
-              </IconButton>
-              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-                <FontAwesomeIcon icon={faCog} />
-              </IconButton>
-              <IconButton 
-                sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-                onClick={handleLogout}
+            {/* Centered Username with @ */}
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                color: '#8899a6',
+                fontSize: '16px',
+                fontWeight: 500,
+                mb: 3
+              }}
+            >
+              @{currentUser?.username?.toLowerCase()}
+            </Typography>
+            
+            {/* Three Big Buttons */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<FontAwesomeIcon icon={faUser} />}
+                onClick={() => navigate('/profile')}
+                sx={{
+                  borderRadius: '25px',
+                  padding: '12px 20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderColor: '#1e2c3c',
+                  color: 'white',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: '#1da1f2',
+                    backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                    color: '#1da1f2'
+                  }
+                }}
               >
-                <FontAwesomeIcon icon={faSignOutAlt} />
-              </IconButton>
+                Profile
+              </Button>
+              
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<FontAwesomeIcon icon={faBookmark} />}
+                onClick={() => handleNavigateToTab(1)}
+                sx={{
+                  borderRadius: '25px',
+                  padding: '12px 20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderColor: '#1e2c3c',
+                  color: 'white',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: '#1da1f2',
+                    backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                    color: '#1da1f2'
+                  }
+                }}
+              >
+                Saved Games
+              </Button>
+              
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<FontAwesomeIcon icon={faSignOutAlt} />}
+                onClick={handleLogout}
+                sx={{
+                  borderRadius: '25px',
+                  padding: '12px 20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderColor: '#1e2c3c',
+                  color: 'white',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: '#e0245e',
+                    backgroundColor: 'rgba(224, 36, 94, 0.1)',
+                    color: '#e0245e'
+                  }
+                }}
+              >
+                Log Out
+              </Button>
             </Box>
           </Box>
 
@@ -1127,6 +1395,16 @@ const ProfilePage = () => {
           navigate('/');
         }}
       />
+
+      {/* Edit Profile Dialog */}
+      {currentUser && (
+        <EditProfileDialog
+          open={openEditProfileDialog}
+          onClose={handleCloseEditProfileDialog}
+          onProfileUpdated={handleProfileUpdated}
+          currentUser={currentUser}
+        />
+      )}
 
       {/* Floating Action Button for Mobile */}
       {isMobile && (
