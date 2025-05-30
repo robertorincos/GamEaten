@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Typography, 
@@ -30,7 +30,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
   faGlobe, 
-  faNewspaper, 
+  faGift, 
   faBell, 
   faEnvelope, 
   faCog, 
@@ -116,6 +116,7 @@ interface Comment {
 
 const Game = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
@@ -224,7 +225,7 @@ const Game = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/';
+    navigate('/');
   };
 
   const handleSearch = async () => {
@@ -235,7 +236,7 @@ const Game = () => {
       const gameId = await searchGame({ query: searchQuery });
       
       if (gameId) {
-        window.location.href = `/game/${gameId}`;
+        navigate(`/game/${gameId}`);
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -267,7 +268,7 @@ const Game = () => {
 
   const handleSelectSuggestion = (gameId: number) => {
     setShowSuggestions(false);
-    window.location.href = `/game/${gameId}`;
+    navigate(`/game/${gameId}`);
   };
 
   const handleClickOutside = () => {
@@ -306,7 +307,7 @@ const Game = () => {
   const handleOpenReviewDialog = () => {
     if (!isAuthenticated()) {
       // Redirect to login if not authenticated
-      window.location.href = '/login';
+      navigate('/login');
       return;
     }
     setOpenReviewDialog(true);
@@ -418,7 +419,7 @@ const Game = () => {
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Box 
-              onClick={() => { window.location.href = '/home'; setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/home'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -431,7 +432,7 @@ const Game = () => {
               Home
             </Box>
             <Box 
-              onClick={() => { window.location.href = '/profile'; setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/profile'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -484,11 +485,11 @@ const Game = () => {
           }
         }}
       >
-        <MenuItem onClick={() => { window.location.href = '/profile'; setUserMenuAnchor(null); }}>
+        <MenuItem onClick={() => { navigate('/profile'); setUserMenuAnchor(null); }}>
           <FontAwesomeIcon icon={faUser} style={{ marginRight: '10px' }} />
           Profile
         </MenuItem>
-        <MenuItem onClick={() => { logout(); window.location.href = '/'; }}>
+        <MenuItem onClick={() => { logout(); navigate('/'); }}>
           <FontAwesomeIcon icon={faSignOutAlt} style={{ marginRight: '10px' }} />
           Logout
         </MenuItem>
@@ -543,7 +544,7 @@ const Game = () => {
           >
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/home'}
+              onClick={() => navigate('/home')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
@@ -554,7 +555,7 @@ const Game = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/global'}
+              onClick={() => navigate('/global')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
@@ -565,18 +566,18 @@ const Game = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/news'}
+              onClick={() => navigate('/giveaways')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
-                <FontAwesomeIcon icon={faNewspaper} />
+                <FontAwesomeIcon icon={faGift} />
               </span>
-              Game News
+              Game Giveaways
             </Box>
             
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/profile'}
+              onClick={() => navigate('/profile')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
@@ -1054,7 +1055,7 @@ const Game = () => {
           
           <Box sx={{ display: 'flex', gap: 1 }}>
             <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-              onClick={() => window.location.href = '/profile'}>
+              onClick={() => navigate('/profile')}>
               <FontAwesomeIcon icon={faUser} />
             </IconButton>
             <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Typography, 
@@ -25,7 +26,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
   faGlobe, 
-  faNewspaper, 
+  faGift, 
   faBell, 
   faEnvelope, 
   faCog, 
@@ -63,6 +64,8 @@ export const HomePage = () => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     const fetchUser = async () => {
       if (isAuthenticated()) {
@@ -93,7 +96,7 @@ export const HomePage = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/';
+    navigate('/');
   };
 
   const handleSearch = async () => {
@@ -106,7 +109,7 @@ export const HomePage = () => {
       if (gameId) {
         console.log(`Found game with ID: ${gameId}`);
         setSearchResults(gameId);
-        window.location.href = `/game/${gameId}`;
+        navigate(`/game/${gameId}`);
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -146,7 +149,7 @@ export const HomePage = () => {
 
   const handleSelectSuggestion = (gameId: number) => {
     setShowSuggestions(false);
-    window.location.href = `/game/${gameId}`;
+    navigate(`/game/${gameId}`);
   };
   
   const handleClickOutside = () => {
@@ -163,7 +166,7 @@ export const HomePage = () => {
 
   const handleOpenReviewDialog = () => {
     if (!isAuthenticated()) {
-      window.location.href = '/login';
+      navigate('/login');
       return;
     }
     setOpenReviewDialog(true);
@@ -233,19 +236,22 @@ export const HomePage = () => {
       </Box>
       
       <Box 
-        className={`nav-item ${activeTab === 'news' ? 'active' : ''}`}
-        onClick={() => handleTabChange('news')}
+        className="nav-item"
+        onClick={() => {
+          navigate('/giveaways');
+          if (inDrawer) setMobileDrawerOpen(false);
+        }}
       >
         <span className="icon">
-          <FontAwesomeIcon icon={faNewspaper} />
+          <FontAwesomeIcon icon={faGift} />
         </span>
-        Game News
+        Game Giveaways
       </Box>
       
       <Box 
         className="nav-item"
         onClick={() => {
-          window.location.href = '/profile';
+          navigate('/profile');
           if (inDrawer) setMobileDrawerOpen(false);
         }}
       >
@@ -369,7 +375,7 @@ export const HomePage = () => {
           }
         }}
       >
-        <MenuItem onClick={() => { window.location.href = '/profile'; handleUserMenuClose(); }}>
+        <MenuItem onClick={() => { navigate('/profile'); handleUserMenuClose(); }}>
           <FontAwesomeIcon icon={faUser} style={{ marginRight: '10px' }} />
           Profile
         </MenuItem>
@@ -491,7 +497,7 @@ export const HomePage = () => {
             }}
           >
             <Typography variant="h6" sx={{ fontWeight: 700, fontSize: isTablet ? '1.1rem' : '1.25rem' }}>
-              {activeTab === 'following' ? 'Following' : activeTab === 'global' ? 'Global' : 'Game News'}
+              {activeTab === 'following' ? 'Following' : activeTab === 'global' ? 'Global' : 'Game Giveaways'}
             </Typography>
           </Box>
         )}

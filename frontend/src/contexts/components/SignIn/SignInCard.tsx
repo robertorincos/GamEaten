@@ -4,7 +4,6 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import MuiCard from '@mui/material/Card';
 import Checkbox from '@mui/material/Checkbox';
-import Divider from '@mui/material/Divider';
 import FormLabel from '@mui/material/FormLabel';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -14,9 +13,9 @@ import Typography from '@mui/material/Typography';
 import { styled, useTheme } from '@mui/material/styles';
 import { useMediaQuery } from '@mui/material';
 import ForgotPassword from '../ForgotPass/ForgotPassword';
-import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../CustomIcons/CustomIcons';
 import { login } from '../../../api/auth';
 import { useState } from 'react';
+import logo from '../../../assets/logo.png';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -131,13 +130,62 @@ export default function SignInCard() {
 
   return (
     <Card variant="outlined">
-      <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
-        <SitemarkIcon />
+      {/* GamEaten Branding Section */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        mb: 3,
+        textAlign: 'center'
+      }}>
+        <Box 
+          component="img"
+          src={logo}
+          alt="GamEaten Logo"
+          sx={{
+            width: 80,
+            height: 80,
+            mb: 2,
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+          }}
+        />
+        <Typography
+          variant="h5"
+          sx={{ 
+            fontWeight: 700,
+            mb: 1,
+            background: 'linear-gradient(45deg, #1da1f2, #00d3ab)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            fontSize: isMobile ? '1.5rem' : '1.75rem'
+          }}
+        >
+          GamEaten
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{ 
+            color: 'text.secondary',
+            maxWidth: '280px',
+            lineHeight: 1.4,
+            fontSize: isMobile ? '14px' : '15px'
+          }}
+        >
+          The ultimate gamer social network.
+        </Typography>
       </Box>
+
       <Typography
         component="h1"
         variant="h4"
-        sx={{ width: '100%', fontSize: 'clamp(2rem, 10vw, 2.15rem)' }}
+        sx={{ 
+          width: '100%', 
+          fontSize: 'clamp(1.5rem, 8vw, 1.75rem)',
+          textAlign: 'center',
+          mb: 2
+        }}
       >
         Sign in
       </Typography>
@@ -169,6 +217,7 @@ export default function SignInCard() {
             color={emailError ? 'error' : 'primary'}
           />
         </FormControl>
+        
         <FormControl>
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <FormLabel htmlFor="password">Password</FormLabel>
@@ -214,6 +263,7 @@ export default function SignInCard() {
         >
           {isLoading ? 'Signing in...' : 'Sign in'}
         </Button>
+        
         <Typography sx={{ textAlign: 'center' }}>
           Don&apos;t have an account?{' '}
           <span>
@@ -234,33 +284,6 @@ export default function SignInCard() {
             </Link>
           </span>
         </Typography>
-      </Box>
-      <Divider>or</Divider>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={() => alert('Sign in with Google')}
-          startIcon={<GoogleIcon />}
-          sx={{
-            minHeight: isMobile ? '48px' : '40px',
-            fontSize: isMobile ? '16px' : '14px'
-          }}
-        >
-          Sign in with Google
-        </Button>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={() => alert('Sign in with Facebook')}
-          startIcon={<FacebookIcon />}
-          sx={{
-            minHeight: isMobile ? '48px' : '40px',
-            fontSize: isMobile ? '16px' : '14px'
-          }}
-        >
-          Sign in with Facebook
-        </Button>
       </Box>
     </Card>
   );

@@ -1790,6 +1790,136 @@ def debug_games():
     except Exception as e:
         return jsonify({"status": f"Debug error: {str(e)}"}), 500
 
+@app.route('/api/game-news', methods=['GET'])
+def get_game_news():
+    """
+    Fetch game giveaways and deals from GamerPower API
+    
+    Query parameters:
+    - type: filter by type (e.g., 'game', 'loot', 'beta')
+    - platform: filter by platform (e.g., 'pc', 'steam', 'epic-games-store')
+    - sort-by: sort by 'date', 'value', 'popularity'
+    """
+    try:
+        # Get query parameters
+        giveaway_type = request.args.get('type', '')
+        platform = request.args.get('platform', '')
+        sort_by = request.args.get('sort-by', 'date')
+        
+        # Build GamerPower API URL
+        base_url = "https://www.gamerpower.com/api/giveaways"
+        params = []
+        
+        if giveaway_type:
+            params.append(f"type={giveaway_type}")
+        if platform:
+            params.append(f"platform={platform}")
+        if sort_by:
+            params.append(f"sort-by={sort_by}")
+            
+        # Construct final URL
+        if params:
+            url = f"{base_url}?{'&'.join(params)}"
+        else:
+            url = base_url
+            
+        # Make request to GamerPower API
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        giveaways = response.json()
+        
+        # Process and enhance the data
+        processed_giveaways = []
+        for giveaway in giveaways:
+            processed_giveaway = {
+                'id': giveaway.get('id'),
+                'title': giveaway.get('title'),
+                'description': giveaway.get('description'),
+                'image': giveaway.get('image'),
+                'thumbnail': giveaway.get('thumbnail'),
+                'instructions': giveaway.get('instructions'),
+                'open_giveaway_url': giveaway.get('open_giveaway_url'),
+                'published_date': giveaway.get('published_date'),
+                'type': giveaway.get('type'),
+                'platforms': giveaway.get('platforms'),
+                'end_date': giveaway.get('end_date'),
+                'users': giveaway.get('users'),
+                'status': giveaway.get('status'),
+                'worth': giveaway.get('worth'),
+                'gamerpower_url': giveaway.get('gamerpower_url'),
+                'open_giveaway': giveaway.get('open_giveaway')
+            }
+            processed_giveaways.append(processed_giveaway)
+        
+        return jsonify({
+            "status": "success",
+            "data": processed_giveaways,
+            "count": len(processed_giveaways),
+            "filters": {
+                "type": giveaway_type,
+                "platform": platform,
+                "sort_by": sort_by
+            }
+        }), 200
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to fetch game news: {str(e)}"
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "status": "error", 
+            "message": f"An error occurred: {str(e)}"
+        }), 500
+
+@app.route('/api/game-news/worth', methods=['GET'])
+def get_game_news_worth():
+    """
+    Fetch giveaways worth summary from GamerPower API
+    
+    Query parameters:
+    - min_value: minimum value in USD (default: 0)
+    
+    Note: This endpoint returns a summary of giveaways worth, not individual giveaways
+    """
+    try:
+        min_value = request.args.get('min_value', '0')
+        
+        # Build GamerPower API URL for worth endpoint
+        url = f"https://www.gamerpower.com/api/worth?min-value={min_value}"
+        
+        # Make request to GamerPower API
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        worth_data = response.json()
+        
+        # The worth endpoint returns a summary, not individual giveaways
+        # Format: {"active_giveaways_number": 92, "worth_estimation_usd": "374.91"}
+        
+        return jsonify({
+            "status": "success",
+            "data": {
+                "active_giveaways_number": worth_data.get("active_giveaways_number", 0),
+                "worth_estimation_usd": worth_data.get("worth_estimation_usd", "0.00"),
+                "min_value": min_value
+            },
+            "type": "worth_summary"
+        }), 200
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to fetch giveaways worth summary: {str(e)}"
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"An error occurred: {str(e)}"
+        }), 500
+
 # Create all tables
 with app.app_context():
     db.create_all()

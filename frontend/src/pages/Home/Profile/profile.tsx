@@ -27,7 +27,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faHome, 
   faGlobe, 
-  faNewspaper, 
+  faGift, 
   faBell, 
   faEnvelope, 
   faCog, 
@@ -42,12 +42,12 @@ import {
   faUserPlus,
   faUserMinus,
   faBars,
-  faEllipsisV,
+  faEllipsisV
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth';
 import { searchGame, searchGameSuggestions, getReviews } from '../../../api/funcs';
 import { ReviewDialog } from '../../../contexts/components/Review/review';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import PostCard from '../../../contexts/components/PostCard/PostCard.tsx';
 
 
@@ -93,6 +93,7 @@ const ProfilePage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
+  const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('Guest');
@@ -351,7 +352,7 @@ const ProfilePage = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/';
+    navigate('/');
   };
 
   const handleSearch = async () => {
@@ -362,7 +363,7 @@ const ProfilePage = () => {
       const gameId = await searchGame({ query: searchQuery });
       
       if (gameId) {
-        window.location.href = `/game/${gameId}`;
+        navigate(`/game/${gameId}`);
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -394,7 +395,7 @@ const ProfilePage = () => {
 
   const handleSelectSuggestion = (gameId: number) => {
     setShowSuggestions(false);
-    window.location.href = `/game/${gameId}`;
+    navigate(`/game/${gameId}`);
   };
 
   const handleClickOutside = () => {
@@ -405,7 +406,7 @@ const ProfilePage = () => {
   const handleOpenReviewDialog = () => {
     if (!isAuthenticated()) {
       // Redirect to login if not authenticated
-      window.location.href = '/login';
+      navigate('/login');
       return;
     }
     setOpenReviewDialog(true);
@@ -415,13 +416,13 @@ const ProfilePage = () => {
     setOpenReviewDialog(false);
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString();
-    } catch {
-      return 'Recently';
-    }
-  };
+  // const formatDate = (dateString: string) => {
+  //   try {
+  //     return new Date(dateString).toLocaleDateString();
+  //   } catch {
+  //     return 'Recently';
+  //   }
+  // };
 
   const handleFollow = async () => {
     if (!userProfile) return;
@@ -520,7 +521,7 @@ const ProfilePage = () => {
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Box 
-              onClick={() => { window.location.href = '/home'; setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/home'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -533,7 +534,7 @@ const ProfilePage = () => {
               Home
             </Box>
             <Box 
-              onClick={() => { window.location.href = '/profile'; setMobileDrawerOpen(false); }}
+              onClick={() => { navigate('/profile'); setMobileDrawerOpen(false); }}
               sx={{ 
                 padding: '16px 20px',
                 display: 'flex',
@@ -587,11 +588,11 @@ const ProfilePage = () => {
           }
         }}
       >
-        <MenuItem onClick={() => { window.location.href = '/home'; setUserMenuAnchor(null); }}>
+        <MenuItem onClick={() => { navigate('/home'); setUserMenuAnchor(null); }}>
           <FontAwesomeIcon icon={faHome} style={{ marginRight: '10px' }} />
           Home
         </MenuItem>
-        <MenuItem onClick={() => { logout(); window.location.href = '/'; }}>
+        <MenuItem onClick={() => { logout(); navigate('/'); }}>
           <FontAwesomeIcon icon={faSignOutAlt} style={{ marginRight: '10px' }} />
           Logout
         </MenuItem>
@@ -646,7 +647,7 @@ const ProfilePage = () => {
           >
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/home'}
+              onClick={() => navigate('/home')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
@@ -657,7 +658,7 @@ const ProfilePage = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/global'}
+              onClick={() => navigate('/global')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
@@ -668,18 +669,18 @@ const ProfilePage = () => {
             
             <Box 
               className="nav-item"
-              onClick={() => window.location.href = '/news'}
+              onClick={() => navigate('/giveaways')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
-                <FontAwesomeIcon icon={faNewspaper} />
+                <FontAwesomeIcon icon={faGift} />
               </span>
-              Game News
+              Game Giveaways
             </Box>
             
             <Box 
               className="nav-item active"
-              onClick={() => window.location.href = '/profile'}
+              onClick={() => navigate('/profile')}
               sx={{ cursor: 'pointer' }}
             >
               <span className="icon">
@@ -1123,7 +1124,7 @@ const ProfilePage = () => {
         open={openReviewDialog} 
         onClose={handleCloseReviewDialog}
         onReviewSubmitted={() => {
-          window.location.reload();
+          navigate('/');
         }}
       />
 

@@ -5,7 +5,6 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Container from '@mui/material/Container';
 import CssBaseline from '@mui/material/CssBaseline';
-import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormLabel from '@mui/material/FormLabel';
 import FormControl from '@mui/material/FormControl';
@@ -19,9 +18,9 @@ import { useMediaQuery } from '@mui/material';
 
 import AppTheme from '../../shared-theme/AppTheme';
 import ColorModeSelect from '../../shared-theme/ColorModeSelect';
-import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../../../contexts/components/CustomIcons/CustomIcons';
 import { useState } from 'react';
 import { register } from '../../../api/auth';
+import logo from '../../../assets/logo.png';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -189,11 +188,62 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
       <ColorModeSelect sx={{ position: 'fixed', top: '1rem', right: '1rem' }} />
       <SignUpContainer maxWidth="sm">
         <Card variant="outlined">
-          <SitemarkIcon />
+          {/* GamEaten Branding Section */}
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            mb: 3,
+            textAlign: 'center'
+          }}>
+            <Box 
+              component="img"
+              src={logo}
+              alt="GamEaten Logo"
+              sx={{
+                width: 80,
+                height: 80,
+                mb: 2,
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}
+            />
+            <Typography
+              variant="h5"
+              sx={{ 
+                fontWeight: 700,
+                mb: 1,
+                background: 'linear-gradient(45deg, #1da1f2, #00d3ab)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                fontSize: isMobile ? '1.5rem' : '1.75rem'
+              }}
+            >
+              GamEaten
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{ 
+                color: 'text.secondary',
+                maxWidth: '280px',
+                lineHeight: 1.4,
+                fontSize: isMobile ? '14px' : '15px'
+              }}
+            >
+              Join the ultimate gamer social network.
+            </Typography>
+          </Box>
+
           <Typography
             component="h1"
             variant="h4"
-            sx={{ width: '100%', textAlign: 'center', fontSize: 'clamp(2rem, 10vw, 2.15rem)' }}
+            sx={{ 
+              width: '100%', 
+              textAlign: 'center', 
+              fontSize: 'clamp(1.5rem, 8vw, 1.75rem)',
+              mb: 2
+            }}
           >
             Sign up
           </Typography>
@@ -264,6 +314,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
               control={<Checkbox value="allowExtraEmails" color="primary" />}
               label="I want to receive updates via email."
             />
+            
             <FormControlLabel
               required
               control={
@@ -293,35 +344,7 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
             >
               {isSubmitting ? 'Signing up...' : 'Sign up'}
             </Button>
-          </Box>
-          <Divider>
-            <Typography sx={{ color: 'text.secondary' }}>or</Typography>
-          </Divider>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => alert('Sign up with Google')}
-              startIcon={<GoogleIcon />}
-              sx={{
-                minHeight: isMobile ? '48px' : '40px',
-                fontSize: isMobile ? '16px' : '14px'
-              }}
-            >
-              Sign up with Google
-            </Button>
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => alert('Sign up with Facebook')}
-              startIcon={<FacebookIcon />}
-              sx={{
-                minHeight: isMobile ? '48px' : '40px',
-                fontSize: isMobile ? '16px' : '14px'
-              }}
-            >
-              Sign up with Facebook
-            </Button>
+            
             <Typography sx={{ textAlign: 'center' }}>
               Already have an account?{' '}
               <Link
