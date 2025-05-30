@@ -1,10 +1,10 @@
-import { Card, CardContent, CardHeader, IconButton, Typography, Box, Avatar, Divider, TextField, Button, Collapse } from '@mui/material';
+import { Card, CardContent, CardHeader, IconButton, Typography, Box, Avatar, Divider, TextField, Button, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, useTheme } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHeart, faComment, faShare, faEllipsisH, faGamepad, faReply } from '@fortawesome/free-solid-svg-icons';
+import { faHeart, faComment, faEllipsisH, faGamepad, faReply, faRetweet } from '@fortawesome/free-solid-svg-icons';
 import { useState } from 'react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { getReviewComments, createComment, likeUnlikeReview } from '../../../api/funcs';
+import { getReviewComments, createComment, likeUnlikeReview, repostUnrepostReview } from '../../../api/funcs';
 
 interface Comment {
   comment_id: number;
@@ -28,8 +28,8 @@ interface PostCardProps {
   commentCount?: number;
   likesCount?: number;
   userHasLiked?: boolean;
-  isHighlighted?: boolean;
-  onReviewClick?: () => void;
+  repostsCount?: number;
+  userHasReposted?: boolean;
 }
 
 const PostCard = ({ 
@@ -43,18 +43,26 @@ const PostCard = ({
   commentCount = 0,
   likesCount = 0,
   userHasLiked = false,
-  isHighlighted = false,
-  onReviewClick 
+  repostsCount = 0,
+  userHasReposted = false
 }: PostCardProps) => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  useMediaQuery('(max-width:480px)');
+  
   const [liked, setLiked] = useState(userHasLiked);
   const [likeCount, setLikeCount] = useState(likesCount);
+  const [reposted, setReposted] = useState(userHasReposted);
+  const [repostCount, setRepostCount] = useState(repostsCount);
   const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [actualCommentCount, setActualCommentCount] = useState(commentCount);
+  const [repostText, setRepostText] = useState('');
+  const [showRepostDialog, setShowRepostDialog] = useState(false);
     // Format date
   const formatDate = (dateString: string) => {
     try {
@@ -99,11 +107,6 @@ const PostCard = ({
       console.error('Failed to create comment:', error);
     }
   };
-  const handleReviewClick = () => {
-    if (onReviewClick) {
-      onReviewClick();
-    }
-  };
   const handleCommentClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!showComments) {
@@ -127,6 +130,35 @@ const PostCard = ({
     }
   };
 
+  const handleRepost = async (withText: boolean = false) => {
+    try {
+      const response = await repostUnrepostReview(id, withText ? repostText.trim() : undefined);
+      setReposted(response.reposted);
+      setRepostCount(response.repost_count);
+      
+      if (withText) {
+        setRepostText('');
+        setShowRepostDialog(false);
+      }
+    } catch (error) {
+      console.error('Failed to repost/unrepost review:', error);
+      // Revert optimistic update on error
+      setReposted(!reposted);
+      setRepostCount(reposted ? repostCount + 1 : repostCount - 1);
+    }
+  };
+
+  const handleQuickRepost = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (reposted) {
+      // If already reposted, unrepost
+      handleRepost(false);
+    } else {
+      // Show dialog for repost options
+      setShowRepostDialog(true);
+    }
+  };
+
   const handleGoToGame = () => {
     window.location.href = `/game/${gameId}`;
   };
@@ -138,25 +170,42 @@ const PostCard = ({
     <Box 
       key={comment.comment_id} 
       sx={{ 
-        pl: isReply ? 3 : 0, 
+        pl: isReply ? (isMobile ? 2 : 3) : 0, 
         mb: 1, 
         borderLeft: isReply ? '2px solid #1e2c3c' : 'none' 
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-        <Avatar sx={{ width: 32, height: 32, bgcolor: '#1da1f2', fontSize: '14px' }}>
+        <Avatar sx={{ 
+          width: isMobile ? 28 : 32, 
+          height: isMobile ? 28 : 32, 
+          bgcolor: '#1da1f2', 
+          fontSize: isMobile ? '12px' : '14px' 
+        }}>
           {comment.username.charAt(0).toUpperCase()}
         </Avatar>
         <Box sx={{ flex: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="body2" sx={{ 
+              fontWeight: 600,
+              fontSize: isMobile ? '12px' : '14px'
+            }}>
               {comment.username}
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8899a6' }}>
+            <Typography variant="caption" sx={{ 
+              color: '#8899a6',
+              fontSize: isMobile ? '11px' : '12px'
+            }}>
               {formatDate(comment.date_created)}
             </Typography>
           </Box>
-          <Typography variant="body2" sx={{ mt: 0.5, mb: 1 }}>
+          <Typography variant="body2" sx={{ 
+            mt: 0.5, 
+            mb: 1,
+            fontSize: isMobile ? '13px' : '14px',
+            lineHeight: 1.4,
+            wordBreak: 'break-word'
+          }}>
             {comment.comment}
           </Typography>
           {comment.gif_url && (
@@ -165,9 +214,9 @@ const PostCard = ({
                 src={comment.gif_url}
                 alt="Comment GIF"
                 style={{
-                  maxWidth: '200px',
-                  maxHeight: '150px',
-                  borderRadius: '8px',
+                  maxWidth: isMobile ? '150px' : '200px',
+                  maxHeight: isMobile ? '100px' : '150px',
+                  borderRadius: isMobile ? '6px' : '8px',
                   objectFit: 'contain'
                 }}
               />
@@ -175,18 +224,28 @@ const PostCard = ({
           )}
           <IconButton 
             size="small" 
-            sx={{ color: '#8899a6', p: 0.5 }}
+            sx={{ 
+              color: '#8899a6', 
+              p: isMobile ? 1 : 0.5,
+              minHeight: isMobile ? '44px' : 'auto',
+              minWidth: isMobile ? '44px' : 'auto'
+            }}
             onClick={() => setReplyingTo(replyingTo === comment.comment_id ? null : comment.comment_id)}
           >
-            <FontAwesomeIcon icon={faReply} size="xs" />
-            <Typography variant="caption" sx={{ ml: 0.5 }}>Reply</Typography>
+            <FontAwesomeIcon icon={faReply} size={isMobile ? 'sm' : 'xs'} />
+            <Typography variant="caption" sx={{ 
+              ml: 0.5,
+              fontSize: isMobile ? '11px' : '12px'
+            }}>
+              Reply
+            </Typography>
           </IconButton>
           
           {replyingTo === comment.comment_id && (
             <Box sx={{ mt: 1 }}>
               <TextField
                 multiline
-                rows={2}
+                rows={isMobile ? 2 : 2}
                 fullWidth
                 placeholder={`Reply to ${comment.username}...`}
                 value={newComment}
@@ -195,18 +254,27 @@ const PostCard = ({
                   '& .MuiOutlinedInput-root': {
                     backgroundColor: '#1e2c3c',
                     color: 'white',
-                    fontSize: '14px',
+                    fontSize: isMobile ? '13px' : '14px',
                     '& fieldset': { borderColor: '#1e2c3c' },
                     '&:hover fieldset': { borderColor: '#1da1f2' },
                     '&.Mui-focused fieldset': { borderColor: '#1da1f2' }
                   }
                 }}
               />
-              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 1, 
+                mt: 1,
+                flexDirection: isMobile ? 'column' : 'row'
+              }}>
                 <Button 
                   size="small" 
                   variant="contained" 
-                  sx={{ bgcolor: '#1da1f2' }}
+                  sx={{ 
+                    bgcolor: '#1da1f2',
+                    minHeight: isMobile ? '44px' : 'auto',
+                    fontSize: isMobile ? '13px' : '12px'
+                  }}
                   onClick={() => handleCommentSubmit(comment.comment_id)}
                 >
                   Reply
@@ -214,7 +282,11 @@ const PostCard = ({
                 <Button 
                   size="small" 
                   variant="text" 
-                  sx={{ color: '#8899a6' }}
+                  sx={{ 
+                    color: '#8899a6',
+                    minHeight: isMobile ? '44px' : 'auto',
+                    fontSize: isMobile ? '13px' : '12px'
+                  }}
                   onClick={() => setReplyingTo(null)}
                 >
                   Cancel
@@ -233,41 +305,79 @@ const PostCard = ({
     </Box>
   );  return (
     <Card sx={{ 
-      borderRadius: '16px', 
-      backgroundColor: isHighlighted ? '#1e2c3c' : '#172331', 
+      borderRadius: isMobile ? '8px' : '16px', 
+      backgroundColor: '#172331', 
       color: 'white',
       boxShadow: 'none',
-      mb: 2,
-      border: isHighlighted ? '2px solid #1da1f2' : '1px solid #1e2c3c',
-      transition: 'all 0.2s ease'
+      mb: isMobile ? 1 : 2,
+      border: '1px solid #1e2c3c',
+      transition: 'all 0.2s ease',
+      width: '100%'
     }}>
-      <Box onClick={handleReviewClick} sx={{ cursor: 'pointer' }}>
+      <Box>
         <CardHeader
           avatar={
-            <Avatar sx={{ width: 48, height: 48, bgcolor: '#1da1f2' }}>
+            <Avatar 
+              sx={{ 
+                width: isMobile ? 40 : 48, 
+                height: isMobile ? 40 : 48, 
+                bgcolor: '#1da1f2',
+                fontSize: isMobile ? '16px' : '20px'
+              }}
+            >
               {username.charAt(0).toUpperCase()}
             </Avatar>
           }
           action={
-            <IconButton sx={{ color: '#8899a6' }}>
+            <IconButton 
+              sx={{ 
+                color: '#8899a6',
+                minWidth: isMobile ? '44px' : 'auto',
+                minHeight: isMobile ? '44px' : 'auto'
+              }}
+            >
               <FontAwesomeIcon icon={faEllipsisH} />
             </IconButton>
           }
           title={
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
+              gap: isMobile ? 0.5 : 1
+            }}>
               <Typography 
                 variant="subtitle1" 
                 sx={{ 
                   fontWeight: 700,
                   cursor: 'pointer',
+                  fontSize: isMobile ? '14px' : '16px',
                   '&:hover': { textDecoration: 'underline' }
                 }}
                 onClick={handleUserClick}
               >
                 {username}
               </Typography>
-              <Typography variant="body2" sx={{ ml: 1, color: '#8899a6' }}>@{username.toLowerCase()}</Typography>
-              <Typography variant="body2" sx={{ ml: 1, color: '#8899a6' }}>· {formatDate(date)}</Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  ml: 1, 
+                  color: '#8899a6',
+                  fontSize: isMobile ? '12px' : '14px'
+                }}
+              >
+                @{username.toLowerCase()}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  ml: 1, 
+                  color: '#8899a6',
+                  fontSize: isMobile ? '12px' : '14px'
+                }}
+              >
+                · {formatDate(date)}
+              </Typography>
             </Box>
           }
           subheader={
@@ -277,6 +387,7 @@ const PostCard = ({
                 color: '#8899a6', 
                 mt: 0.5, 
                 cursor: 'pointer',
+                fontSize: isMobile ? '12px' : '14px',
                 '&:hover': { textDecoration: 'underline' }
               }}
               onClick={handleGoToGame}
@@ -286,15 +397,30 @@ const PostCard = ({
             </Typography>
           }
           sx={{
+            px: isMobile ? 2 : 3,
+            py: isMobile ? 1.5 : 2,
             '& .MuiCardHeader-title': { display: 'block' },
             '& .MuiCardHeader-subheader': { color: '#8899a6' }
           }}
         />
         
-        <CardContent sx={{ pt: 0 }}>
+        <CardContent sx={{ 
+          pt: 0, 
+          px: isMobile ? 2 : 3,
+          pb: isMobile ? 1.5 : 2
+        }}>
           {/* Display text content if available */}
           {text && (
-            <Typography variant="body1" sx={{ mb: gifUrl ? 2 : 2, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                mb: gifUrl ? 2 : 2, 
+                lineHeight: 1.5, 
+                whiteSpace: 'pre-line',
+                fontSize: isMobile ? '14px' : '16px',
+                wordBreak: 'break-word'
+              }}
+            >
               {text}
             </Typography>
           )}
@@ -307,7 +433,7 @@ const PostCard = ({
                   display: 'flex',
                   justifyContent: 'center',
                   backgroundColor: '#1e2c3c',
-                  borderRadius: '16px',
+                  borderRadius: isMobile ? '8px' : '16px',
                   p: 1,
                   cursor: 'pointer'
                 }}
@@ -318,12 +444,11 @@ const PostCard = ({
                   alt={text || 'GIF Review'}
                   style={{
                     maxWidth: '100%',
-                    maxHeight: '300px',
-                    borderRadius: '12px',
+                    maxHeight: isMobile ? '200px' : '300px',
+                    borderRadius: isMobile ? '6px' : '12px',
                     objectFit: 'contain'
                   }}
                   onError={(e) => {
-                    // Hide broken GIF images
                     e.currentTarget.style.display = 'none';
                   }}
                 />
@@ -331,58 +456,106 @@ const PostCard = ({
             </Box>
           )}
           
-          <Divider sx={{ borderColor: '#1e2c3c', my: 1 }} />
+          <Divider sx={{ borderColor: '#1e2c3c', my: isMobile ? 0.5 : 1 }} />
           
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1 }}>            <Box 
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            pt: isMobile ? 0.5 : 1,
+            gap: isMobile ? 1 : 2
+          }}>
+            <Box 
               sx={{ 
                 display: 'flex',
                 alignItems: 'center',
                 color: liked ? '#f91880' : '#8899a6', 
                 '&:hover': { color: '#f91880' },
-                cursor: 'pointer'
+                cursor: 'pointer',
+                minHeight: isMobile ? '44px' : 'auto',
+                minWidth: isMobile ? '44px' : 'auto',
+                p: isMobile ? 0.5 : 0,
+                borderRadius: isMobile ? '8px' : '0',
+                '&:active': isMobile ? { backgroundColor: 'rgba(249, 24, 128, 0.1)' } : {}
               }}
               onClick={handleLike}
             >
-              <FontAwesomeIcon icon={faHeart} />
-              <Typography variant="body2" fontSize="13px" sx={{ ml: 1 }}>{likeCount}</Typography>
+              <FontAwesomeIcon icon={faHeart} size={isMobile ? 'lg' : undefined} />
+              <Typography 
+                variant="body2" 
+                fontSize={isMobile ? "14px" : "13px"} 
+                sx={{ ml: 1 }}
+              >
+                {likeCount}
+              </Typography>
             </Box>
-              <Box 
+            
+            <Box 
               sx={{ 
                 display: 'flex',
                 alignItems: 'center',
                 color: showComments ? '#1da1f2' : '#8899a6', 
                 '&:hover': { color: '#1da1f2' },
                 cursor: 'pointer',
-                position: 'relative'
+                position: 'relative',
+                minHeight: isMobile ? '44px' : 'auto',
+                minWidth: isMobile ? '44px' : 'auto',
+                p: isMobile ? 0.5 : 0,
+                borderRadius: isMobile ? '8px' : '0',
+                '&:active': isMobile ? { backgroundColor: 'rgba(29, 161, 242, 0.1)' } : {}
               }}
               onClick={handleCommentClick}
             >
-              <FontAwesomeIcon icon={faComment} />              <Typography variant="body2" fontSize="13px" sx={{ ml: 1 }}>
-                {showComments ? 'Hide Comments' : `${actualCommentCount} Comments`}
+              <FontAwesomeIcon icon={faComment} size={isMobile ? 'lg' : undefined} />
+              <Typography 
+                variant="body2" 
+                fontSize={isMobile ? "14px" : "13px"} 
+                sx={{ ml: 1 }}
+              >
+                {showComments ? (isMobile ? 'Hide' : 'Hide Comments') : `${actualCommentCount} ${isMobile && actualCommentCount > 0 ? '' : 'Comments'}`}
               </Typography>
             </Box>
             
-            <Box sx={{ 
-              display: 'flex',
-              alignItems: 'center',
-              color: '#8899a6', 
-              '&:hover': { color: '#00ba7c' },
-              cursor: 'pointer'
-            }}>
-              <FontAwesomeIcon icon={faShare} />
-              <Typography variant="body2" fontSize="13px" sx={{ ml: 1 }}>Share</Typography>
+            <Box 
+              sx={{ 
+                display: 'flex',
+                alignItems: 'center',
+                color: reposted ? '#00ba7c' : '#8899a6', 
+                '&:hover': { color: '#00ba7c' },
+                cursor: 'pointer',
+                minHeight: isMobile ? '44px' : 'auto',
+                minWidth: isMobile ? '44px' : 'auto',
+                p: isMobile ? 0.5 : 0,
+                borderRadius: isMobile ? '8px' : '0',
+                '&:active': isMobile ? { backgroundColor: 'rgba(0, 186, 124, 0.1)' } : {}
+              }}
+              onClick={handleQuickRepost}
+            >
+              <FontAwesomeIcon icon={faRetweet} size={isMobile ? 'lg' : undefined} />
+              <Typography 
+                variant="body2" 
+                fontSize={isMobile ? "14px" : "13px"} 
+                sx={{ ml: 1 }}
+              >
+                {repostCount}
+              </Typography>
             </Box>
           </Box>
         </CardContent>
       </Box>
-        {/* Comments section */}
+        
+      {/* Comments section */}
       <Collapse in={showComments}>
-        <Box sx={{ p: 2, pt: 0, borderTop: '1px solid #1e2c3c' }}>
+        <Box sx={{ 
+          p: isMobile ? 2 : 2, 
+          pt: 0, 
+          borderTop: '1px solid #1e2c3c' 
+        }}>
           {/* Add new comment */}
           <Box sx={{ mb: 2 }}>
             <TextField
               multiline
-              rows={3}
+              rows={isMobile ? 2 : 3}
               fullWidth
               placeholder="Write a comment..."
               value={newComment}
@@ -391,6 +564,7 @@ const PostCard = ({
                 '& .MuiOutlinedInput-root': {
                   backgroundColor: '#1e2c3c',
                   color: 'white',
+                  fontSize: isMobile ? '14px' : '16px',
                   '& fieldset': { borderColor: '#1e2c3c' },
                   '&:hover fieldset': { borderColor: '#1da1f2' },
                   '&.Mui-focused fieldset': { borderColor: '#1da1f2' }
@@ -400,7 +574,12 @@ const PostCard = ({
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button 
                 variant="contained" 
-                sx={{ bgcolor: '#1da1f2' }}
+                sx={{ 
+                  bgcolor: '#1da1f2',
+                  minHeight: isMobile ? '44px' : 'auto',
+                  px: isMobile ? 3 : 2,
+                  fontSize: isMobile ? '14px' : '13px'
+                }}
                 onClick={() => handleCommentSubmit()}
                 disabled={!newComment.trim()}
               >
@@ -411,23 +590,165 @@ const PostCard = ({
           
           {/* Display comments */}
           {loadingComments ? (
-            <Typography variant="body2" sx={{ color: '#8899a6', textAlign: 'center', py: 2 }}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: '#8899a6', 
+                textAlign: 'center', 
+                py: 2,
+                fontSize: isMobile ? '14px' : '16px'
+              }}
+            >
               Loading comments...
             </Typography>
           ) : comments.length === 0 ? (
-            <Typography variant="body2" sx={{ color: '#8899a6', textAlign: 'center', py: 2 }}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: '#8899a6', 
+                textAlign: 'center', 
+                py: 2,
+                fontSize: isMobile ? '14px' : '16px'
+              }}
+            >
               No comments yet. Be the first to comment!
             </Typography>
           ) : (
-            <Box sx={{ maxHeight: '400px', overflowY: 'auto' }}>
+            <Box sx={{ 
+              maxHeight: isMobile ? '300px' : '400px', 
+              overflowY: 'auto' 
+            }}>
               {comments
-                .filter(comment => !comment.parent_id) // Only show top-level comments
+                .filter(comment => !comment.parent_id)
                 .map(comment => renderComment(comment))
               }
             </Box>
           )}
         </Box>
       </Collapse>
+      
+      {/* Repost Dialog */}
+      <Dialog 
+        open={showRepostDialog} 
+        onClose={() => setShowRepostDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#172331',
+            color: 'white',
+            border: '1px solid #1e2c3c',
+            margin: isMobile ? 0 : 2,
+            borderRadius: isMobile ? 0 : '12px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: 'white', 
+          borderBottom: '1px solid #1e2c3c',
+          fontSize: isMobile ? '18px' : '20px',
+          px: isMobile ? 2 : 3
+        }}>
+          Repost Review
+        </DialogTitle>
+        <DialogContent sx={{ 
+          pt: 2,
+          px: isMobile ? 2 : 3
+        }}>
+          <TextField
+            multiline
+            rows={isMobile ? 2 : 3}
+            fullWidth
+            placeholder="Add a comment to your repost (optional)..."
+            value={repostText}
+            onChange={(e) => setRepostText(e.target.value)}
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#1e2c3c',
+                color: 'white',
+                fontSize: isMobile ? '14px' : '16px',
+                '& fieldset': { borderColor: '#1e2c3c' },
+                '&:hover fieldset': { borderColor: '#1da1f2' },
+                '&.Mui-focused fieldset': { borderColor: '#1da1f2' }
+              }
+            }}
+          />
+          
+          {/* Preview of the original review */}
+          <Box sx={{ 
+            p: isMobile ? 1.5 : 2, 
+            backgroundColor: '#1e2c3c', 
+            borderRadius: isMobile ? '8px' : '12px',
+            border: '1px solid #2f3336'
+          }}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: '#8899a6', 
+                mb: 1,
+                fontSize: isMobile ? '12px' : '14px'
+              }}
+            >
+              Reposting from @{username}
+            </Typography>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: 'white',
+                fontSize: isMobile ? '14px' : '16px',
+                wordBreak: 'break-word'
+              }}
+            >
+              {text}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ 
+          borderTop: '1px solid #1e2c3c', 
+          p: isMobile ? 2 : 2,
+          gap: isMobile ? 1 : 0,
+          flexDirection: isMobile ? 'column' : 'row'
+        }}>
+          <Button 
+            onClick={() => setShowRepostDialog(false)}
+            sx={{ 
+              color: '#8899a6',
+              minHeight: isMobile ? '44px' : 'auto',
+              width: isMobile ? '100%' : 'auto',
+              order: isMobile ? 3 : 0
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => handleRepost(false)}
+            sx={{ 
+              color: '#1da1f2', 
+              mr: isMobile ? 0 : 1,
+              minHeight: isMobile ? '44px' : 'auto',
+              width: isMobile ? '100%' : 'auto',
+              order: isMobile ? 2 : 0
+            }}
+          >
+            Repost
+          </Button>
+          <Button 
+            onClick={() => handleRepost(true)}
+            variant="contained"
+            sx={{ 
+              bgcolor: '#1da1f2',
+              minHeight: isMobile ? '44px' : 'auto',
+              width: isMobile ? '100%' : 'auto',
+              order: isMobile ? 1 : 0
+            }}
+            disabled={!repostText.trim()}
+          >
+            Repost with Comment
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 };

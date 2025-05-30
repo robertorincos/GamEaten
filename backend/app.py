@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, make_response, request, render_template, session, flash
 import requests
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from sqlalchemy import text, Index
 import json
 from os import urandom
 import bcrypt
@@ -26,11 +26,67 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.getenv('secret'))  # Fallback to 'secret' for backward compatibility
 db = SQLAlchemy(app)
 
+# Games cache table - to store game information locally
+class Games(db.Model):
+    id = db.Column(db.Integer, primary_key=True)  # IGDB game ID
+    name = db.Column(db.String(255), nullable=False, index=True)
+    summary = db.Column(db.Text, nullable=True)
+    rating = db.Column(db.Float, nullable=True)
+    cover_url = db.Column(db.String(500), nullable=True)
+    release_date = db.Column(db.String(100), nullable=True)
+    platforms = db.Column(db.Text, nullable=True)  # JSON string of platforms
+    artwork_urls = db.Column(db.Text, nullable=True)  # JSON string of artwork URLs
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    reviews = db.relationship('Reviews', backref='game_info', lazy='dynamic')
+    
+    def __repr__(self):
+        return f'<Game {self.id}: {self.name}>'
+    
+    def to_dict(self):
+        platforms_list = []
+        artwork_list = []
+        
+        try:
+            if self.platforms:
+                platforms_list = json.loads(self.platforms)
+        except (json.JSONDecodeError, TypeError):
+            platforms_list = []
+        
+        try:
+            if self.artwork_urls:
+                artwork_list = json.loads(self.artwork_urls)
+        except (json.JSONDecodeError, TypeError):
+            artwork_list = []
+            
+        return {
+            'id': self.id,
+            'name': self.name,
+            'summary': self.summary,
+            'rating': self.rating,
+            'cover_url': self.cover_url,
+            'release_date': self.release_date,
+            'platforms': platforms_list,
+            'artwork_urls': artwork_list,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None
+        }
+    
+    @staticmethod
+    def should_refresh(game_record):
+        """Check if game data should be refreshed (older than 7 days)"""
+        if not game_record or not game_record.last_updated:
+            return True
+        return datetime.utcnow() - game_record.last_updated > timedelta(days=7)
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password = db.Column(db.String(255), unique=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
     def __repr__(self):
         return f'<User {self.username}>'
 
@@ -46,21 +102,30 @@ class Follow(db.Model):
     def __repr__(self):
         return f'<Follow {self.follower_id} -> {self.following_id}>'
 
-# Reviews table - what was previously called "Comments"
+# Reviews table - optimized with game caching
 class Reviews(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    id_game = db.Column(db.Integer, unique=False, nullable=False)
-    username = db.Column(db.String(80), unique=False, nullable=False)
-    review_text = db.Column(db.String(255), unique=False, nullable=True)  # Allow null for GIF-only reviews
-    gif_url = db.Column(db.String(500), unique=False, nullable=True)  # For GIF URLs
-    date_created = db.Column(db.DateTime, default=datetime.utcnow)
+    id_game = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False, index=True)
+    username = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    review_text = db.Column(db.String(255), unique=False, nullable=True)
+    gif_url = db.Column(db.String(500), unique=False, nullable=True)
+    date_created = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    # Relationships
+    user = db.relationship('User', backref='user_reviews')
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_game_date', 'id_game', 'date_created'),
+        Index('idx_user_date', 'username', 'date_created'),
+    )
     
     def __repr__(self):
         return f'<Review {self.id}>'
 
-    def to_dict(self, current_user_id=None):
+    def to_dict(self, current_user_id=None, include_game_info=True):
         # Get the actual username from the User model
-        user = User.query.filter_by(id=self.username).first()
+        user = User.query.get(self.username)
         display_username = user.username if user else f"User {self.username}"
         
         # Get comment count for this review
@@ -68,6 +133,9 @@ class Reviews(db.Model):
         
         # Get likes count for this review
         likes_count = Likes.query.filter_by(review_id=self.id).count()
+        
+        # Get reposts count for this review
+        reposts_count = Reposts.query.filter_by(review_id=self.id).count()
         
         # Check if current user has liked this review
         user_has_liked = False
@@ -77,20 +145,47 @@ class Reviews(db.Model):
                 user_id=current_user_id
             ).first() is not None
         
-        return {
+        # Check if current user has reposted this review
+        user_has_reposted = False
+        if current_user_id:
+            user_has_reposted = Reposts.query.filter_by(
+                review_id=self.id,
+                user_id=current_user_id
+            ).first() is not None
+        
+        result = {
             "id": self.id, 
             "id_game": self.id_game, 
-            "user_id": self.username,  # Keep the original ID for reference
-            "username": display_username,  # Add the actual username
-            "review_text": self.review_text if self.review_text else "",  # Handle null reviews
+            "user_id": self.username,
+            "username": display_username,
+            "review_text": self.review_text if self.review_text else "",
             "gif_url": self.gif_url,
             "has_text": bool(self.review_text and self.review_text.strip()),
             "has_gif": bool(self.gif_url),
             "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S'),
             "comment_count": comment_count,
             "likes_count": likes_count,
-            "user_has_liked": user_has_liked
+            "reposts_count": reposts_count,
+            "user_has_liked": user_has_liked,
+            "user_has_reposted": user_has_reposted
         }
+        
+        # Include cached game information if requested
+        if include_game_info:
+            # Try to get from relationship first
+            game_info = None
+            if hasattr(self, 'game_info') and self.game_info:
+                game_info = self.game_info.to_dict()
+            else:
+                # Fallback: Get from Games table directly
+                game_record = Games.query.get(self.id_game)
+                if game_record:
+                    game_info = game_record.to_dict()
+            
+            if game_info:
+                result["game_info"] = game_info
+        
+        return result
 
 # Likes table - for review likes
 class Likes(db.Model):
@@ -138,6 +233,55 @@ class Comments(db.Model):
             "has_gif": bool(self.gif_url),
             "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S'),
             "reply_count": len(self.replies) if hasattr(self, 'replies') else 0
+        }
+
+# Reposts table - for Twitter-like reposts of reviews
+class Reposts(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    review_id = db.Column(db.Integer, db.ForeignKey('reviews.id'), nullable=False, index=True)
+    repost_text = db.Column(db.String(255), unique=False, nullable=True)  # Optional text to add to repost
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='reposts')
+    review = db.relationship('Reviews', backref='reposts')
+    
+    # Ensure a user can't repost the same review twice
+    __table_args__ = (db.UniqueConstraint('user_id', 'review_id', name='unique_repost'),)
+    
+    def __repr__(self):
+        return f'<Repost {self.user_id} -> Review {self.review_id}>'
+
+    def to_dict(self, current_user_id=None):
+        # Get the user info for the reposter
+        user = User.query.filter_by(id=self.user_id).first()
+        reposter_username = user.username if user else f"User {self.user_id}"
+        
+        # Get the original review data
+        original_review = self.review.to_dict(current_user_id) if self.review else None
+        
+        # Get repost count for this review
+        repost_count = Reposts.query.filter_by(review_id=self.review_id).count()
+        
+        # Check if current user has reposted this review
+        user_has_reposted = False
+        if current_user_id:
+            user_has_reposted = Reposts.query.filter_by(
+                review_id=self.review_id,
+                user_id=current_user_id
+            ).first() is not None
+        
+        return {
+            "id": self.id,
+            "type": "repost",  # Identifier to distinguish from regular reviews
+            "user_id": self.user_id,
+            "username": reposter_username,
+            "repost_text": self.repost_text,
+            "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "original_review": original_review,
+            "repost_count": repost_count,
+            "user_has_reposted": user_has_reposted
         }
 
 @app.route('/api/search', methods=['POST'])
@@ -202,27 +346,114 @@ def game():
                 return jsonify({"status": "ID must contain only digits"}), 400
             id_value = int(id_value)
 
-        if id_value <= 0 or id_value > 1000000000:  # Ajuste o limite superior conforme necessário
+        if id_value <= 0 or id_value > 1000000000:
             return jsonify({"status": "ID out of acceptable range"}), 400
         
-        t = check_token()
-        token = t.json()['access_token']
-        headers = {
-            'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 
-            'Authorization': f'Bearer {token}'
-        }
-        body = 'fields name, cover.*, rating, artworks.*, summary, release_dates.human, platforms.name ;where id = {};'.format(id_value)
-        response = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
+        # Try to get from cache first
+        cached_game = Games.query.get(id_value)
         
-        if not response.json():
+        if cached_game and not Games.should_refresh(cached_game):
+            # Return cached data in IGDB format for backward compatibility
+            game_dict = cached_game.to_dict()
+            
+            # Convert to IGDB API format
+            result = [{
+                'id': game_dict['id'],
+                'name': game_dict['name'],
+                'summary': game_dict['summary'],
+                'rating': game_dict['rating'],
+                'cover': {'url': game_dict['cover_url']} if game_dict['cover_url'] else None,
+                'artworks': [{'url': url} for url in game_dict['artwork_urls']] if game_dict['artwork_urls'] else [],
+                'platforms': game_dict['platforms'] if game_dict['platforms'] else [],
+                'release_dates': [{'human': game_dict['release_date']}] if game_dict['release_date'] else []
+            }]
+            
+            return jsonify(result), 200
+        
+        # Fetch from IGDB and cache
+        game_data = fetch_game_from_igdb(id_value)
+        if not game_data:
             return jsonify({"status": "Game not found"}), 404
-        return jsonify(response.json()), 200
+        
+        # Cache the game data
+        cache_game_info(db, Games, game_data)
+        
+        # Return in IGDB format
+        platforms = json.loads(game_data['platforms']) if game_data['platforms'] else []
+        artworks = [{'url': url} for url in json.loads(game_data['artwork_urls'])] if game_data['artwork_urls'] else []
+        
+        result = [{
+            'id': game_data['id'],
+            'name': game_data['name'],
+            'summary': game_data['summary'],
+            'rating': game_data['rating'],
+            'cover': {'url': game_data['cover_url']} if game_data['cover_url'] else None,
+            'artworks': artworks,
+            'platforms': platforms,
+            'release_dates': [{'human': game_data['release_date']}] if game_data['release_date'] else []
+        }]
+        
+        return jsonify(result), 200
+        
     except ValueError as e:
         return jsonify({"status": f"Invalid ID format: {str(e)}"}), 400
     except Exception as e:
-        return jsonify({"status": f"An error occurred: {str(e)}"}), 500
-    except Exception as e:
         print(f"Error in /game route: {str(e)}")
+        return jsonify({"status": "An error occurred processing your request"}), 500
+
+@app.route('/api/games/bulk', methods=['POST'])
+def bulk_games():
+    """
+    Fetch multiple games efficiently using cache-first approach
+    Accepts: {"game_ids": [1, 2, 3, ...]}
+    Returns: {"games": {1: {...}, 2: {...}, ...}}
+    """
+    try:
+        if not request.is_json:
+            return jsonify({"status": "JSON request expected"}), 400
+        
+        if 'game_ids' not in request.json:
+            return jsonify({"status": "game_ids array is required"}), 400
+        
+        game_ids = request.json['game_ids']
+        
+        if not isinstance(game_ids, list):
+            return jsonify({"status": "game_ids must be an array"}), 400
+        
+        if len(game_ids) > 50:  # Limit to prevent abuse
+            return jsonify({"status": "Maximum 50 games per request"}), 400
+        
+        # Validate all IDs
+        validated_ids = []
+        for game_id in game_ids:
+            try:
+                validated_id = int(game_id)
+                if validated_id > 0:
+                    validated_ids.append(validated_id)
+            except (ValueError, TypeError):
+                continue
+        
+        if not validated_ids:
+            return jsonify({"games": {}}), 200
+        
+        # Get games from cache or fetch from IGDB
+        cached_games = get_or_cache_games(db, Games, validated_ids)
+        
+        # Format response
+        games_data = {}
+        for game_id, game_record in cached_games.items():
+            if game_record:
+                games_data[game_id] = {
+                    'id': game_record.id,
+                    'name': game_record.name,
+                    'cover_url': game_record.cover_url,
+                    'rating': game_record.rating
+                }
+        
+        return jsonify({"games": games_data}), 200
+        
+    except Exception as e:
+        print(f"Error in bulk games route: {str(e)}")
         return jsonify({"status": "An error occurred processing your request"}), 500
 
 @app.route('/api/register', methods=['POST'])
@@ -558,7 +789,13 @@ def create_review():
             return jsonify({"status": "Game ID must be positive"}), 400
     except ValueError:
         return jsonify({"status": "Game ID must be an integer"}), 400
-      # Get review text and GIF URL
+    
+    # Ensure game exists in cache - fetch if needed
+    game_cache = get_or_cache_games(db, Games, [id_game])
+    if id_game not in game_cache:
+        return jsonify({"status": "Game not found"}), 404
+    
+    # Get review text and GIF URL
     review_text = request.json.get('review_text', request.json.get('comment', '')).strip()  # Accept both 'review_text' and 'comment' for compatibility
     gif_url = request.json.get('gif_url', '').strip()
     
@@ -590,10 +827,10 @@ def create_review():
         db.session.add(new_review)
         db.session.commit()
         
-        # Return the created review data
+        # Return the created review data with game info
         return jsonify({
             'status': 'review created',
-            'review': new_review.to_dict(current_user_id=user_id)
+            'review': new_review.to_dict(current_user_id=user_id, include_game_info=True)
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -809,28 +1046,27 @@ def ver():
         except ValueError:
             return jsonify({"status": "user_id must be an integer"}), 400
     offset = (page - 1) * size
+    current_user_id = request.token_data['user']
+    
     if busca == "game":
+        # Get reviews for specific game with cached game info
         total_reviews = Reviews.query.filter_by(id_game=id_game).count()
-        reviews = Reviews.query.filter_by(id_game=id_game).order_by(Reviews.date_created.desc()).offset(offset).limit(size).all()
-        review_dicts = [review.to_dict(current_user_id=request.token_data['user']) for review in reviews]
-        result = {
-            "comments": review_dicts,  # Keep 'comments' key for backward compatibility
-            "pagination": {
-                "total": total_reviews,
-                "pages": (total_reviews + size - 1) // size,
-                "current_page": page,
-                "per_page": size
-            }
-        }
-        return jsonify(result), 200
-    elif busca == "user":
-        total_reviews = Reviews.query.filter_by(username=user_id).count()
-        reviews = Reviews.query.filter_by(username=user_id).order_by(
+        reviews = Reviews.query.options(
+            db.joinedload(Reviews.game_info),
+            db.joinedload(Reviews.user)
+        ).filter_by(id_game=id_game).order_by(
             Reviews.date_created.desc()
         ).offset(offset).limit(size).all()
-        review_dicts = [review.to_dict(current_user_id=request.token_data['user']) for review in reviews]
+        
+        # Ensure all games are cached
+        unique_game_ids = list(set([r.id_game for r in reviews]))
+        if unique_game_ids:
+            get_or_cache_games(db, Games, unique_game_ids)
+        
+        review_dicts = [review.to_dict(current_user_id=current_user_id, include_game_info=True) for review in reviews]
+        
         result = {
-            "comments": review_dicts,  # Keep 'comments' key for backward compatibility
+            "comments": review_dicts,
             "pagination": {
                 "total": total_reviews,
                 "pages": (total_reviews + size - 1) // size,
@@ -839,23 +1075,114 @@ def ver():
             }
         }
         return jsonify(result), 200
-    elif busca == "ambos":
-        if id_game and id_game > 0:
-            total_reviews = Reviews.query.filter_by(id_game=id_game, username=user_id).count()
-            reviews = Reviews.query.filter_by(id_game=id_game, username=user_id).order_by(
-                Reviews.date_created.desc()
-            ).offset(offset).limit(size).all()
-        else:
-            total_reviews = Reviews.query.count()
-            reviews = Reviews.query.order_by(
-                Reviews.date_created.desc()
-            ).offset(offset).limit(size).all()
-        review_dicts = [review.to_dict(current_user_id=request.token_data['user']) for review in reviews]
+        
+    elif busca == "user":
+        # Get reviews for specific user with cached game info
+        total_reviews = Reviews.query.filter_by(username=user_id).count()
+        reviews = Reviews.query.options(
+            db.joinedload(Reviews.game_info),
+            db.joinedload(Reviews.user)
+        ).filter_by(username=user_id).order_by(
+            Reviews.date_created.desc()
+        ).offset(offset).limit(size).all()
+        
+        # Get unique game IDs for batch caching
+        unique_game_ids = list(set([r.id_game for r in reviews]))
+        if unique_game_ids:
+            get_or_cache_games(db, Games, unique_game_ids)
+        
+        review_dicts = [review.to_dict(current_user_id=current_user_id, include_game_info=True) for review in reviews]
+        
         result = {
-            "comments": review_dicts,  # Keep 'comments' key for backward compatibility
+            "comments": review_dicts,
             "pagination": {
                 "total": total_reviews,
                 "pages": (total_reviews + size - 1) // size,
+                "current_page": page,
+                "per_page": size
+            }
+        }
+        return jsonify(result), 200
+        
+    elif busca == "ambos":
+        if id_game and id_game > 0:
+            # Get reviews for specific game and user
+            total_reviews = Reviews.query.filter_by(id_game=id_game, username=user_id).count()
+            reviews = Reviews.query.options(
+                db.joinedload(Reviews.game_info),
+                db.joinedload(Reviews.user)
+            ).filter_by(id_game=id_game, username=user_id).order_by(
+                Reviews.date_created.desc()
+            ).offset(offset).limit(size).all()
+            
+            # Ensure games are cached
+            unique_game_ids = list(set([r.id_game for r in reviews]))
+            if unique_game_ids:
+                get_or_cache_games(db, Games, unique_game_ids)
+            
+            review_dicts = [review.to_dict(current_user_id=current_user_id, include_game_info=True) for review in reviews]
+        else:
+            # For the main feed (id_game=0), include both reviews and reposts with optimized queries
+            # Get total counts
+            total_reviews = Reviews.query.count()
+            total_reposts = Reposts.query.count()
+            total_items = total_reviews + total_reposts
+            
+            # Get reviews with game info preloaded
+            reviews = Reviews.query.options(
+                db.joinedload(Reviews.game_info),
+                db.joinedload(Reviews.user)
+            ).order_by(Reviews.date_created.desc()).limit(size * 2).all()
+            
+            # Get reposts with related data preloaded
+            reposts = Reposts.query.options(
+                db.joinedload(Reposts.user),
+                db.joinedload(Reposts.review).joinedload(Reviews.game_info),
+                db.joinedload(Reposts.review).joinedload(Reviews.user)
+            ).order_by(Reposts.created_at.desc()).limit(size * 2).all()
+            
+            # Get unique game IDs for batch caching
+            game_ids_from_reviews = [r.id_game for r in reviews]
+            game_ids_from_reposts = [r.review.id_game for r in reposts if r.review]
+            unique_game_ids = list(set(game_ids_from_reviews + game_ids_from_reposts))
+            if unique_game_ids:
+                print(f"Caching games for IDs: {unique_game_ids}")
+                cached_games = get_or_cache_games(db, Games, unique_game_ids)
+                print(f"Cached {len(cached_games)} games")
+            
+            # Convert to dictionaries with unified format for sorting
+            feed_items = []
+            
+            for review in reviews:
+                review_dict = review.to_dict(current_user_id=current_user_id, include_game_info=True)
+                print(f"Review {review.id} game_info: {review_dict.get('game_info', 'None')}")
+                review_dict['feed_type'] = 'review'
+                review_dict['sort_date'] = review.date_created
+                feed_items.append(review_dict)
+            
+            for repost in reposts:
+                repost_dict = repost.to_dict(current_user_id=current_user_id)
+                repost_dict['feed_type'] = 'repost'
+                repost_dict['sort_date'] = repost.created_at
+                feed_items.append(repost_dict)
+            
+            # Sort all items by date (newest first) and paginate
+            feed_items.sort(key=lambda x: x['sort_date'], reverse=True)
+            
+            # Apply pagination to the mixed feed
+            paginated_items = feed_items[offset:offset + size]
+            
+            # Remove the sort_date field as it's only for internal sorting
+            for item in paginated_items:
+                del item['sort_date']
+            
+            review_dicts = paginated_items
+            
+        result = {
+            "comments": review_dicts,
+            "pagination": {
+                "total": total_items if id_game == 0 else total_reviews,
+                "pages": ((total_items if id_game == 0 else total_reviews) + size - 1) // size,
                 "current_page": page,
                 "per_page": size
             }
@@ -1218,6 +1545,250 @@ def like_unlike_review(review_id):
         db.session.rollback()
         return jsonify({"status": f"Error processing like: {str(e)}"}), 500
 
+
+# Repost functionality for reviews
+@app.route('/api/review/<int:review_id>/repost', methods=['POST'])
+@token_required
+def repost_unrepost_review(review_id):
+    """
+    Repost or un-repost a review. If the user has already reposted the review, 
+    it will be un-reposted. If not reposted, it will be reposted.
+    """
+    try:
+        user_id = request.token_data['user']
+        
+        # Validate that the review exists
+        review = Reviews.query.get(review_id)
+        if not review:
+            return jsonify({"status": "Review not found"}), 404
+        
+        # Check if user is trying to repost their own review
+        if review.username == str(user_id):
+            return jsonify({"status": "Cannot repost your own review"}), 400
+        
+        # Check if user has already reposted this review
+        existing_repost = Reposts.query.filter_by(user_id=user_id, review_id=review_id).first()
+        
+        if existing_repost:
+            # Un-repost - remove the repost
+            db.session.delete(existing_repost)
+            db.session.commit()
+            
+            # Get updated repost count
+            repost_count = Reposts.query.filter_by(review_id=review_id).count()
+            
+            return jsonify({
+                "status": "unreposted",
+                "reposted": False,
+                "repost_count": repost_count
+            }), 200
+        else:
+            # Get optional repost text from request body
+            repost_text = None
+            if request.is_json and 'repost_text' in request.json:
+                repost_text = request.json['repost_text'].strip()
+                if repost_text and len(repost_text) > 255:
+                    return jsonify({"status": "Repost text too long (max 255 characters)"}), 400
+                if repost_text:
+                    repost_text = html.escape(repost_text)
+            
+            # Repost - add a new repost
+            new_repost = Reposts(user_id=user_id, review_id=review_id, repost_text=repost_text)
+            db.session.add(new_repost)
+            db.session.commit()
+            
+            # Get updated repost count
+            repost_count = Reposts.query.filter_by(review_id=review_id).count()
+            
+            return jsonify({
+                "status": "reposted",
+                "reposted": True,
+                "repost_count": repost_count,
+                "repost_id": new_repost.id
+            }), 200
+            
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": f"Error processing repost: {str(e)}"}), 500
+
+
+@app.route('/api/reposts', methods=['GET'])
+@token_required 
+def get_reposts():
+    """
+    Get reposts for the feed (similar to getting reviews but for reposts)
+    """
+    try:
+        # Get pagination parameters
+        page = int(request.args.get('page', 1))
+        size = int(request.args.get('size', 20))
+        
+        if page < 1:
+            return jsonify({"status": "Page must be at least 1"}), 400
+        if size < 1 or size > 100:
+            return jsonify({"status": "Size must be between 1 and 100"}), 400
+        
+        offset = (page - 1) * size
+        current_user_id = request.token_data['user']
+        
+        # Get reposts ordered by creation date (newest first)
+        total_reposts = Reposts.query.count()
+        reposts = Reposts.query.order_by(Reposts.created_at.desc()).offset(offset).limit(size).all()
+        
+        reposts_data = []
+        for repost in reposts:
+            repost_dict = repost.to_dict(current_user_id)
+            reposts_data.append(repost_dict)
+        
+        result = {
+            "reposts": reposts_data,
+            "pagination": {
+                "total": total_reposts,
+                "pages": (total_reposts + size - 1) // size,
+                "current_page": page,
+                "per_page": size
+            }
+        }
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({"status": f"Error fetching reposts: {str(e)}"}), 500
+
+@app.route('/api/cache/stats', methods=['GET'])
+@token_required
+def cache_stats():
+    """
+    Get cache statistics for debugging and monitoring
+    """
+    try:
+        # Get cache statistics
+        total_games = Games.query.count()
+        recent_games = Games.query.filter(
+            Games.last_updated > datetime.utcnow() - timedelta(days=1)
+        ).count()
+        old_games = Games.query.filter(
+            Games.last_updated < datetime.utcnow() - timedelta(days=7)
+        ).count()
+        
+        total_reviews = Reviews.query.count()
+        total_users = User.query.count()
+        
+        stats = {
+            'cache': {
+                'total_games_cached': total_games,
+                'recent_games': recent_games,
+                'old_games_needing_refresh': old_games
+            },
+            'database': {
+                'total_reviews': total_reviews,
+                'total_users': total_users
+            },
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        return jsonify({"status": f"Error getting cache stats: {str(e)}"}), 500
+
+@app.route('/api/cache/refresh', methods=['POST'])
+@token_required
+def refresh_cache():
+    """
+    Force refresh of game cache for specific games or all old games
+    """
+    try:
+        if request.is_json and 'game_ids' in request.json:
+            # Refresh specific games
+            game_ids = request.json['game_ids']
+            if not isinstance(game_ids, list) or len(game_ids) > 100:
+                return jsonify({"status": "game_ids must be a list with max 100 items"}), 400
+            
+            refreshed = []
+            for game_id in game_ids:
+                try:
+                    game_id = int(game_id)
+                    game_data = fetch_game_from_igdb(game_id)
+                    if game_data:
+                        cache_game_info(db, Games, game_data)
+                        refreshed.append(game_id)
+                except Exception as e:
+                    print(f"Error refreshing game {game_id}: {str(e)}")
+                    continue
+            
+            return jsonify({
+                "status": "refresh completed", 
+                "refreshed_games": refreshed,
+                "count": len(refreshed)
+            }), 200
+        else:
+            # Refresh all old games (older than 7 days)
+            old_games = Games.query.filter(
+                Games.last_updated < datetime.utcnow() - timedelta(days=7)
+            ).limit(50).all()  # Limit to prevent overwhelming the API
+            
+            refreshed = []
+            for game in old_games:
+                try:
+                    game_data = fetch_game_from_igdb(game.id)
+                    if game_data:
+                        cache_game_info(db, Games, game_data)
+                        refreshed.append(game.id)
+                except Exception as e:
+                    print(f"Error refreshing game {game.id}: {str(e)}")
+                    continue
+            
+            return jsonify({
+                "status": "refresh completed",
+                "refreshed_games": refreshed,
+                "count": len(refreshed)
+            }), 200
+            
+    except Exception as e:
+        return jsonify({"status": f"Error refreshing cache: {str(e)}"}), 500
+
+@app.route('/api/debug/games', methods=['GET'])
+@token_required
+def debug_games():
+    """
+    Debug endpoint to check game caching system
+    """
+    try:
+        # Get some sample reviews
+        sample_reviews = Reviews.query.limit(5).all()
+        debug_info = {
+            'total_reviews': Reviews.query.count(),
+            'total_cached_games': Games.query.count(),
+            'sample_reviews': []
+        }
+        
+        for review in sample_reviews:
+            # Try to get game info
+            game_record = Games.query.get(review.id_game)
+            
+            review_info = {
+                'review_id': review.id,
+                'game_id': review.id_game,
+                'game_cached': game_record is not None,
+                'game_name': game_record.name if game_record else 'Not cached',
+                'review_has_game_info': hasattr(review, 'game_info') and review.game_info is not None
+            }
+            
+            # Try to cache the game if not already cached
+            if not game_record:
+                game_data = fetch_game_from_igdb(review.id_game)
+                if game_data:
+                    cached_game = cache_game_info(db, Games, game_data)
+                    review_info['just_cached'] = cached_game is not None
+                    review_info['cached_name'] = cached_game.name if cached_game else 'Failed to cache'
+            
+            debug_info['sample_reviews'].append(review_info)
+        
+        return jsonify(debug_info), 200
+        
+    except Exception as e:
+        return jsonify({"status": f"Debug error: {str(e)}"}), 500
 
 # Create all tables
 with app.app_context():

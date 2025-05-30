@@ -14,7 +14,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import MuiCard from '@mui/material/Card';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
+import { useMediaQuery } from '@mui/material';
 
 import AppTheme from '../../shared-theme/AppTheme';
 import ColorModeSelect from '../../shared-theme/ColorModeSelect';
@@ -36,6 +37,11 @@ const Card = styled(MuiCard)(({ theme }) => ({
   [theme.breakpoints.up('sm')]: {
     width: '450px',
   },
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(3),
+    margin: theme.spacing(1),
+    marginTop: theme.spacing(2),
+  },
   ...theme.applyStyles('dark', {
     boxShadow:
       'hsla(220, 30%, 5%, 0.5) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.08) 0px 15px 35px -5px',
@@ -48,24 +54,8 @@ const SignUpContainer = styled(Container)(({ theme }) => ({
   flexDirection: 'column',
   justifyContent: 'center',
   alignItems: 'center',
-  padding: theme.spacing(2),
-  position: 'relative',
-  [theme.breakpoints.up('sm')]: {
-    padding: theme.spacing(4),
-  },
-  '&::before': {
-    content: '""',
-    display: 'block',
-    position: 'absolute',
-    zIndex: -1,
-    inset: 0,
-    backgroundImage:
-      'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))',
-    backgroundRepeat: 'no-repeat',
-    ...theme.applyStyles('dark', {
-      backgroundImage:
-        'radial-gradient(at 50% 50%, hsla(210, 100%, 16%, 0.5), hsl(220, 30%, 5%))',
-    }),
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(1),
   },
 }));
 
@@ -88,6 +78,8 @@ const SignUpContainer = styled(Container)(({ theme }) => ({
 
 export default function SignUp(props: { disableCustomTheme?: boolean }) {
   // Replace navigate with our custom hook
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const [emailError, setEmailError] = React.useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
@@ -294,6 +286,10 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
               fullWidth
               variant="contained"
               disabled={isSubmitting}
+              sx={{
+                minHeight: isMobile ? '48px' : '40px',
+                fontSize: isMobile ? '16px' : '14px'
+              }}
             >
               {isSubmitting ? 'Signing up...' : 'Sign up'}
             </Button>
@@ -307,6 +303,10 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
               variant="outlined"
               onClick={() => alert('Sign up with Google')}
               startIcon={<GoogleIcon />}
+              sx={{
+                minHeight: isMobile ? '48px' : '40px',
+                fontSize: isMobile ? '16px' : '14px'
+              }}
             >
               Sign up with Google
             </Button>
@@ -315,6 +315,10 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
               variant="outlined"
               onClick={() => alert('Sign up with Facebook')}
               startIcon={<FacebookIcon />}
+              sx={{
+                minHeight: isMobile ? '48px' : '40px',
+                fontSize: isMobile ? '16px' : '14px'
+              }}
             >
               Sign up with Facebook
             </Button>
@@ -324,7 +328,14 @@ export default function SignUp(props: { disableCustomTheme?: boolean }) {
                 component="a"
                 href="/"
                 variant="body2"
-                sx={{ alignSelf: 'center', cursor: 'pointer' }}
+                sx={{ 
+                  alignSelf: 'center', 
+                  cursor: 'pointer',
+                  fontSize: isMobile ? '16px' : '14px',
+                  minHeight: isMobile ? '44px' : 'auto',
+                  display: 'inline-flex',
+                  alignItems: 'center'
+                }}
                 onClick={(e) => {
                   e.preventDefault();
                   window.location.href = '/'; // This ensures full navigation

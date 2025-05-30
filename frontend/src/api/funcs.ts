@@ -10,9 +10,25 @@ interface GameSearchCache {
   [query: string]: CacheItem;
 }
 
+// Game info cache interface
+interface GameInfo {
+  id: number;
+  name: string;
+  cover_url?: string;
+  rating?: number;
+}
+
+interface GameInfoCache {
+  [gameId: number]: {
+    data: GameInfo;
+    timestamp: number;
+  };
+}
+
 // Cache configuration
 const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
 let gameSearchCache: GameSearchCache = {};
+let gameInfoCache: GameInfoCache = {};
 
 export interface GameSearchQuery {
     query: string;
@@ -20,6 +36,10 @@ export interface GameSearchQuery {
 
 export interface GameQuery {
     id: number;
+}
+
+export interface BulkGamesQuery {
+    game_ids: number[];
 }
 
 export interface GifSearchQuery {
@@ -142,6 +162,53 @@ export interface UserListResponse {
     };
 }
 
+export interface UserSearchQuery {
+    query: string;
+    limit?: number;
+}
+
+export interface UserSearchResult {
+    id: number;
+    username: string;
+    created_at: string;
+    reviews_count: number;
+    recent_game?: {
+        id: number;
+        name: string;
+        cover_url?: string;
+    };
+    is_following: boolean;
+    followers_count: number;
+    following_count: number;
+    relevance_score: number;
+}
+
+export interface UserSearchResponse {
+    users: UserSearchResult[];
+    total: number;
+    query: string;
+}
+
+export interface SearchSuggestion {
+    type: 'user' | 'game';
+    id: number;
+    title: string;
+    subtitle: string;
+    icon: 'user' | 'gamepad';
+    cover_url?: string;
+}
+
+export interface SearchSuggestionsQuery {
+    query: string;
+    include_users?: boolean;
+    include_games?: boolean;
+}
+
+export interface SearchSuggestionsResponse {
+    suggestions: SearchSuggestion[];
+    query: string;
+}
+
 /**
  * Search for a game by name with caching
  */
@@ -241,13 +308,90 @@ export const clearGameSearchCache = (): void => {
  */
 export const getGameDetails = async ({ id }: { id: number }) => {
   try {
+    // Check cache first
+    const cached = gameInfoCache[id];
+    if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+      return [cached.data]; // Return in array format for backward compatibility
+    }
+    
     // Change to POST request with data in body as required by the API
     const response = await axiosInstance.post('/api/game', { id });
+    
+    // Cache the response
+    if (response.data && response.data.length > 0) {
+      gameInfoCache[id] = {
+        data: response.data[0],
+        timestamp: Date.now()
+      };
+    }
+    
     return response.data;
   } catch (error) {
     console.error('API Error - getGameDetails:', error);
     throw error;
   }
+};
+
+/**
+ * Bulk fetch multiple games efficiently
+ */
+export const getBulkGames = async ({ game_ids }: BulkGamesQuery): Promise<Record<number, GameInfo>> => {
+  try {
+    if (!game_ids || game_ids.length === 0) {
+      return {};
+    }
+
+    // Check cache for already fetched games
+    const cached: Record<number, GameInfo> = {};
+    const missingIds: number[] = [];
+    
+    game_ids.forEach(id => {
+      const cachedGame = gameInfoCache[id];
+      if (cachedGame && Date.now() - cachedGame.timestamp < CACHE_EXPIRY) {
+        cached[id] = cachedGame.data;
+      } else {
+        missingIds.push(id);
+      }
+    });
+
+    // Fetch missing games from backend
+    if (missingIds.length > 0) {
+      const response = await axiosInstance.post('/api/games/bulk', { game_ids: missingIds });
+      
+      if (response.data && response.data.games) {
+        // Cache the new games
+        Object.entries(response.data.games).forEach(([gameId, gameData]) => {
+          const id = parseInt(gameId);
+          gameInfoCache[id] = {
+            data: gameData as GameInfo,
+            timestamp: Date.now()
+          };
+          cached[id] = gameData as GameInfo;
+        });
+      }
+    }
+
+    return cached;
+  } catch (error) {
+    console.error('API Error - getBulkGames:', error);
+    // Return cached games even if fetch fails
+    const cached: Record<number, GameInfo> = {};
+    game_ids.forEach(id => {
+      const cachedGame = gameInfoCache[id];
+      if (cachedGame) {
+        cached[id] = cachedGame.data;
+      }
+    });
+    return cached;
+  }
+};
+
+/**
+ * Clear the game info cache
+ */
+export const clearGameInfoCache = (): void => {
+    gameInfoCache = {};
+    console.log('Game info cache cleared');
 };
 
 /**
@@ -472,5 +616,74 @@ export const likeUnlikeReview = async (reviewId: number): Promise<{
     } catch (error) {
         console.error('API Error - likeUnlikeReview:', error);
         throw error;
+    }
+};
+
+/**
+ * Repost or un-repost a review
+ */
+export const repostUnrepostReview = async (reviewId: number, repostText?: string): Promise<{
+    status: string;
+    reposted: boolean;
+    repost_count: number;
+    repost_id?: number;
+}> => {
+    try {
+        const data = repostText ? { repost_text: repostText } : {};
+        const response = await axiosInstance.post(`/api/review/${reviewId}/repost`, data);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - repostUnrepostReview:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get reposts feed
+ */
+export const getReposts = async (page: number = 1, size: number = 20): Promise<{
+    reposts: any[];
+    pagination: {
+        total: number;
+        pages: number;
+        current_page: number;
+        per_page: number;
+    };
+}> => {
+    try {
+        const response = await axiosInstance.get('/api/reposts', {
+            params: { page, size }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getReposts:', error);
+        throw error;
+    }
+};
+
+/**
+ * Search for users with intelligent matching and context
+ */
+export const searchUsers = async (searchQuery: UserSearchQuery): Promise<UserSearchResponse> => {
+    try {
+        const response = await axiosInstance.post('/api/search/users', searchQuery);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - searchUsers:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get unified search suggestions (users + games from cache)
+ */
+export const getSearchSuggestions = async (searchQuery: SearchSuggestionsQuery): Promise<SearchSuggestionsResponse> => {
+    try {
+        const response = await axiosInstance.post('/api/search/suggestions', searchQuery);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - getSearchSuggestions:', error);
+        // Return empty suggestions on error instead of throwing
+        return { suggestions: [], query: searchQuery.query };
     }
 };

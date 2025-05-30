@@ -13,7 +13,15 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  Button
+  Button,
+  useMediaQuery,
+  useTheme,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Menu,
+  MenuItem,
+  Fab
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -32,7 +40,9 @@ import {
   faEdit,
   faPencilAlt,
   faUserPlus,
-  faUserMinus
+  faUserMinus,
+  faBars,
+  faEllipsisV,
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../../api/auth';
 import { searchGame, searchGameSuggestions, getReviews } from '../../../api/funcs';
@@ -80,6 +90,10 @@ interface GameResult {
 
 const ProfilePage = () => {
   const { username: profileUsername } = useParams<{ username: string }>();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
+  
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('Guest');
   const [activeTab, setActiveTab] = useState(0);
@@ -99,6 +113,10 @@ const ProfilePage = () => {
     following: 0,
     joinDate: ''
   });
+
+  // Mobile-specific state
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
   // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
@@ -397,7 +415,7 @@ const ProfilePage = () => {
     setOpenReviewDialog(false);
   };
 
-  (dateString: string) => {
+  const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString();
     } catch {
@@ -434,6 +452,7 @@ const ProfilePage = () => {
   return (
     <Box sx={{ 
       display: 'flex', 
+      flexDirection: isMobile ? 'column' : 'row',
       justifyContent: 'center',
       minHeight: '100vh', 
       width: '100vw',
@@ -442,125 +461,266 @@ const ProfilePage = () => {
       padding: 0,
       backgroundColor: '#0e1621'
     }}>
-      {/* Left Column - Navigation */}
-      <Box 
-        sx={{ 
-          width: '220px', 
-          borderRight: '1px solid #1e2c3c', 
-          padding: '20px',
-          height: '100vh',
-          position: 'sticky',
-          top: 0,
-          overflowY: 'auto'
+      {/* Mobile Header */}
+      {isMobile && (
+        <AppBar 
+          position="sticky" 
+          sx={{ 
+            backgroundColor: '#0e1621', 
+            borderBottom: '1px solid #1e2c3c',
+            boxShadow: 'none'
+          }}
+        >
+          <Toolbar sx={{ justifyContent: 'space-between', minHeight: '56px !important' }}>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setMobileDrawerOpen(true)}
+              sx={{ p: 1 }}
+            >
+              <FontAwesomeIcon icon={faBars} />
+            </IconButton>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '8px' }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                GamEaten
+              </Typography>
+            </Box>
+            
+            <IconButton 
+              color="inherit" 
+              onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+              sx={{ p: 1 }}
+            >
+              <FontAwesomeIcon icon={faEllipsisV} />
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+      )}
+
+      {/* Mobile Navigation Drawer */}
+      <Drawer
+        anchor="left"
+        open={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: 280,
+            backgroundColor: '#0e1621',
+            color: 'white',
+            borderRight: '1px solid #1e2c3c'
+          }
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
-          <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '10px' }} />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>GamEaten</Typography>
-        </Box>
-        
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: 1,
-            '& .nav-item': {
-              padding: '12px 15px',
-              borderRadius: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              fontWeight: 500,
-              transition: 'all 0.2s',
-              '&:hover': {
-                backgroundColor: 'rgba(29, 161, 242, 0.1)'
-              },
-              '&.active': {
+        <Box sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+            <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '10px' }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>GamEaten</Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box 
+              onClick={() => { window.location.href = '/home'; setMobileDrawerOpen(false); }}
+              sx={{ 
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
+              }}
+            >
+              <FontAwesomeIcon icon={faHome} style={{ marginRight: '15px' }} />
+              Home
+            </Box>
+            <Box 
+              onClick={() => { window.location.href = '/profile'; setMobileDrawerOpen(false); }}
+              sx={{ 
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
                 backgroundColor: '#1da1f2',
                 color: '#fff'
-              },
-              '& .icon': {
-                width: '20px',
-                marginRight: '15px',
-                textAlign: 'center'
+              }}
+            >
+              <FontAwesomeIcon icon={faUser} style={{ marginRight: '15px' }} />
+              Profile
+            </Box>
+          </Box>
+          
+          <Button 
+            variant="contained" 
+            fullWidth 
+            onClick={() => {
+              setOpenReviewDialog(true);
+              setMobileDrawerOpen(false);
+            }}
+            sx={{
+              mt: 3,
+              py: 1.5,
+              borderRadius: '30px',
+              backgroundColor: '#1da1f2',
+              fontWeight: 'bold',
+              textTransform: 'none',
+              fontSize: '16px',
+              '&:hover': {
+                backgroundColor: '#1a91da'
               }
-            }
-          }}
-        >
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/home'}
-            sx={{ cursor: 'pointer' }}
+            }}
           >
-            <span className="icon">
-              <FontAwesomeIcon icon={faHome} />
-            </span>
-            Home
-          </Box>
-          
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/global'}
-            sx={{ cursor: 'pointer' }}
-          >
-            <span className="icon">
-              <FontAwesomeIcon icon={faGlobe} />
-            </span>
-            Global
-          </Box>
-          
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/news'}
-            sx={{ cursor: 'pointer' }}
-          >
-            <span className="icon">
-              <FontAwesomeIcon icon={faNewspaper} />
-            </span>
-            Game News
-          </Box>
-          
-          <Box 
-            className="nav-item active"
-            onClick={() => window.location.href = '/profile'}
-            sx={{ cursor: 'pointer' }}
-          >
-            <span className="icon">
-              <FontAwesomeIcon icon={faUser} />
-            </span>
-            Profile
-          </Box>
+            <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+            Review Game
+          </Button>
         </Box>
-        
-        {/* Review Button - Similar to Twitter's Tweet button */}
-        <Button 
-          variant="contained" 
-          fullWidth 
-          onClick={handleOpenReviewDialog}
-          sx={{
-            mt: 3,
-            mb: 3,
-            py: 1.5,
-            borderRadius: '30px',
-            backgroundColor: '#1da1f2',
-            fontWeight: 'bold',
-            textTransform: 'none',
-            fontSize: '16px',
-            '&:hover': {
-              backgroundColor: '#1a91da'
-            }
+      </Drawer>
+
+      {/* User Menu for Mobile */}
+      <Menu
+        anchorEl={userMenuAnchor}
+        open={Boolean(userMenuAnchor)}
+        onClose={() => setUserMenuAnchor(null)}
+        sx={{
+          '& .MuiPaper-root': {
+            backgroundColor: '#172331',
+            color: 'white',
+            border: '1px solid #1e2c3c'
+          }
+        }}
+      >
+        <MenuItem onClick={() => { window.location.href = '/home'; setUserMenuAnchor(null); }}>
+          <FontAwesomeIcon icon={faHome} style={{ marginRight: '10px' }} />
+          Home
+        </MenuItem>
+        <MenuItem onClick={() => { logout(); window.location.href = '/'; }}>
+          <FontAwesomeIcon icon={faSignOutAlt} style={{ marginRight: '10px' }} />
+          Logout
+        </MenuItem>
+      </Menu>
+
+      {/* Left Column - Navigation (Desktop/Tablet only) */}
+      {!isMobile && (
+        <Box 
+          sx={{ 
+            width: isTablet ? '200px' : '220px', 
+            borderRight: '1px solid #1e2c3c', 
+            padding: isTablet ? '15px' : '20px',
+            height: '100vh',
+            position: 'sticky',
+            top: 0,
+            overflowY: 'auto'
           }}
         >
-          <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
-          Review Game
-        </Button>
-      </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+            <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '10px' }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: isTablet ? '1.1rem' : '1.25rem' }}>
+              GamEaten
+            </Typography>
+          </Box>
+          
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 1,
+              '& .nav-item': {
+                padding: '12px 15px',
+                borderRadius: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                fontWeight: 500,
+                transition: 'all 0.2s',
+                '&:hover': {
+                  backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                },
+                '&.active': {
+                  backgroundColor: '#1da1f2',
+                  color: '#fff'
+                },
+                '& .icon': {
+                  width: '20px',
+                  marginRight: '15px',
+                  textAlign: 'center'
+                }
+              }
+            }}
+          >
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/home'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faHome} />
+              </span>
+              Home
+            </Box>
+            
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/global'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faGlobe} />
+              </span>
+              Global
+            </Box>
+            
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/news'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faNewspaper} />
+              </span>
+              Game News
+            </Box>
+            
+            <Box 
+              className="nav-item active"
+              onClick={() => window.location.href = '/profile'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faUser} />
+              </span>
+              Profile
+            </Box>
+          </Box>
+          
+          {/* Review Button - Similar to Twitter's Tweet button */}
+          <Button 
+            variant="contained" 
+            fullWidth 
+            onClick={handleOpenReviewDialog}
+            sx={{
+              mt: 3,
+              mb: 3,
+              py: 1.5,
+              borderRadius: '30px',
+              backgroundColor: '#1da1f2',
+              fontWeight: 'bold',
+              textTransform: 'none',
+              fontSize: '16px',
+              '&:hover': {
+                backgroundColor: '#1a91da'
+              }
+            }}
+          >
+            <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+            Review Game
+          </Button>
+        </Box>
+      )}
 
       {/* Middle Column - Profile Content */}
       <Box 
         sx={{ 
-          width: '600px',
-          borderRight: '1px solid #1e2c3c',
-          minHeight: '100vh'
+          width: isMobile ? '100%' : isTablet ? '500px' : '600px',
+          borderRight: !isMobile && !isTablet ? '1px solid #1e2c3c' : 'none',
+          minHeight: isMobile ? 'auto' : '100vh',
+          overflowY: isMobile ? 'visible' : 'auto'
         }}
       >
         {loading ? (
@@ -574,7 +734,7 @@ const ProfilePage = () => {
               {/* Banner Image */}
               <Box sx={{ 
                 width: '100%', 
-                height: '200px', 
+                height: isMobile ? '150px' : '200px', 
                 position: 'relative', 
                 overflow: 'hidden',
                 backgroundColor: '#172331',
@@ -585,13 +745,13 @@ const ProfilePage = () => {
               <Box 
                 sx={{ 
                   position: 'absolute', 
-                  bottom: '-50px', 
-                  left: '20px',
+                  bottom: isMobile ? '-40px' : '-50px', 
+                  left: isMobile ? '16px' : '20px',
                   border: '4px solid #0e1621',
                   borderRadius: '50%',
                   overflow: 'hidden',
-                  width: '120px',
-                  height: '120px',
+                  width: isMobile ? '80px' : '120px',
+                  height: isMobile ? '80px' : '120px',
                   backgroundColor: '#172331'
                 }}
               >
@@ -599,7 +759,7 @@ const ProfilePage = () => {
                   sx={{ 
                     width: '100%', 
                     height: '100%', 
-                    fontSize: '48px',
+                    fontSize: isMobile ? '32px' : '48px',
                     backgroundColor: '#1da1f2'
                   }}
                 >
@@ -777,184 +937,186 @@ const ProfilePage = () => {
       </Box>
 
       {/* Right Column - Stats & Search */}
-      <Box 
-        sx={{ 
-          width: '320px', 
-          padding: '20px',
-          height: '100vh',
-          position: 'sticky',
-          top: 0,
-          overflowY: 'auto'
-        }}
-      >
-        <Box sx={{ position: 'relative' }}>
-          <Paper
-            sx={{
-              p: '2px 4px',
-              display: 'flex',
-              alignItems: 'center',
-              borderRadius: '30px',
-              backgroundColor: '#172331',
+      {!isMobile && !isTablet && (
+        <Box 
+          sx={{ 
+            width: '320px', 
+            padding: '20px',
+            height: '100vh',
+            position: 'sticky',
+            top: 0,
+            overflowY: 'auto'
+          }}
+        >
+          <Box sx={{ position: 'relative' }}>
+            <Paper
+              sx={{
+                p: '2px 4px',
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '30px',
+                backgroundColor: '#172331',
+                mb: 3,
+                border: '1px solid #1e2c3c'
+              }}
+            >
+              <IconButton 
+                sx={{ p: '10px', color: '#8899a6' }}
+                onClick={handleSearch}
+                disabled={searchLoading}
+              >
+                <FontAwesomeIcon icon={searchLoading ? faSpinner : faSearch} spin={searchLoading} />
+              </IconButton>
+              <InputBase
+                sx={{ ml: 1, flex: 1, color: 'white' }}
+                placeholder="Search GamEaten"
+                inputProps={{ 'aria-label': 'search' }}
+                value={searchQuery}
+                onChange={handleSearchInputChange}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                onBlur={() => setTimeout(() => handleClickOutside(), 200)}
+              />
+            </Paper>
+
+            {showSuggestions && suggestions.length > 0 && (
+              <Paper 
+                sx={{ 
+                  position: 'absolute', 
+                  width: '100%', 
+                  zIndex: 20, 
+                  mt: -2, 
+                  backgroundColor: '#172331',
+                  color: 'white',
+                  border: '1px solid #1e2c3c',
+                  borderRadius: '10px',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}
+              >
+                <List>
+                  {suggestions.map((game) => (
+                    <ListItem 
+                      key={game.id} 
+                      onClick={() => handleSelectSuggestion(game.id)}
+                      sx={{ 
+                        '&:hover': { 
+                          backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                        },
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <ListItemText 
+                        primary={game.name} 
+                        primaryTypographyProps={{ 
+                          sx: { color: 'white' }
+                        }} 
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            )}
+          </Box>
+
+          {/* User Actions */}
+          <Box 
+            sx={{ 
+              backgroundColor: '#172331', 
+              borderRadius: '15px',
+              padding: '20px',
               mb: 3,
               border: '1px solid #1e2c3c'
             }}
           >
-            <IconButton 
-              sx={{ p: '10px', color: '#8899a6' }}
-              onClick={handleSearch}
-              disabled={searchLoading}
-            >
-              <FontAwesomeIcon icon={searchLoading ? faSpinner : faSearch} spin={searchLoading} />
-            </IconButton>
-            <InputBase
-              sx={{ ml: 1, flex: 1, color: 'white' }}
-              placeholder="Search GamEaten"
-              inputProps={{ 'aria-label': 'search' }}
-              value={searchQuery}
-              onChange={handleSearchInputChange}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              onBlur={() => setTimeout(() => handleClickOutside(), 200)}
-            />
-          </Paper>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Avatar sx={{ width: 60, height: 60 }}>
+                {currentUser?.username?.charAt(0).toUpperCase()}
+              </Avatar>
+              <Box sx={{ ml: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  {currentUser?.username}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                  @{currentUser?.username?.toLowerCase()}
+                </Typography>
+              </Box>
+            </Box>
+            
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
+                <Badge badgeContent={4} color="error">
+                  <FontAwesomeIcon icon={faBell} />
+                </Badge>
+              </IconButton>
+              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
+                <Badge badgeContent={2} color="error">
+                  <FontAwesomeIcon icon={faEnvelope} />
+                </Badge>
+              </IconButton>
+              <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
+                <FontAwesomeIcon icon={faCog} />
+              </IconButton>
+              <IconButton 
+                sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
+                onClick={handleLogout}
+              >
+                <FontAwesomeIcon icon={faSignOutAlt} />
+              </IconButton>
+            </Box>
+          </Box>
 
-          {showSuggestions && suggestions.length > 0 && (
-            <Paper 
-              sx={{ 
-                position: 'absolute', 
-                width: '100%', 
-                zIndex: 20, 
-                mt: -2, 
-                backgroundColor: '#172331',
-                color: 'white',
-                border: '1px solid #1e2c3c',
-                borderRadius: '10px',
-                maxHeight: '300px',
-                overflowY: 'auto'
-              }}
-            >
-              <List>
-                {suggestions.map((game) => (
-                  <ListItem 
-                    key={game.id} 
-                    onClick={() => handleSelectSuggestion(game.id)}
-                    sx={{ 
-                      '&:hover': { 
-                        backgroundColor: 'rgba(29, 161, 242, 0.1)'
-                      },
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <ListItemText 
-                      primary={game.name} 
-                      primaryTypographyProps={{ 
-                        sx: { color: 'white' }
-                      }} 
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          )}
-        </Box>
-
-        {/* User Actions */}
-        <Box 
-          sx={{ 
-            backgroundColor: '#172331', 
-            borderRadius: '15px',
-            padding: '20px',
-            mb: 3,
-            border: '1px solid #1e2c3c'
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <Avatar sx={{ width: 60, height: 60 }}>
-              {currentUser?.username?.charAt(0).toUpperCase()}
-            </Avatar>
-            <Box sx={{ ml: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                {currentUser?.username}
-              </Typography>
+          {/* Profile Stats */}
+          <Box 
+            sx={{ 
+              backgroundColor: '#172331', 
+              borderRadius: '15px',
+              padding: '20px',
+              mb: 3,
+              border: '1px solid #1e2c3c'
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+              {isOwnProfile ? 'Your Stats' : `${username}'s Stats`}
+            </Typography>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                @{currentUser?.username?.toLowerCase()}
+                Reviews
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {userStats.totalReviews}
+              </Typography>
+            </Box>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                Games Reviewed
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {userStats.totalGames}
+              </Typography>
+            </Box>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                Following
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {userStats.following}
+              </Typography>
+            </Box>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="body2" sx={{ color: '#8899a6' }}>
+                Followers
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {userStats.followers}
               </Typography>
             </Box>
           </Box>
-          
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-              <Badge badgeContent={4} color="error">
-                <FontAwesomeIcon icon={faBell} />
-              </Badge>
-            </IconButton>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-              <Badge badgeContent={2} color="error">
-                <FontAwesomeIcon icon={faEnvelope} />
-              </Badge>
-            </IconButton>
-            <IconButton sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}>
-              <FontAwesomeIcon icon={faCog} />
-            </IconButton>
-            <IconButton 
-              sx={{ backgroundColor: '#1e2c3c', color: 'white', '&:hover': { backgroundColor: '#253341' } }}
-              onClick={handleLogout}
-            >
-              <FontAwesomeIcon icon={faSignOutAlt} />
-            </IconButton>
-          </Box>
         </Box>
-
-        {/* Profile Stats */}
-        <Box 
-          sx={{ 
-            backgroundColor: '#172331', 
-            borderRadius: '15px',
-            padding: '20px',
-            mb: 3,
-            border: '1px solid #1e2c3c'
-          }}
-        >
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            {isOwnProfile ? 'Your Stats' : `${username}'s Stats`}
-          </Typography>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" sx={{ color: '#8899a6' }}>
-              Reviews
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {userStats.totalReviews}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" sx={{ color: '#8899a6' }}>
-              Games Reviewed
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {userStats.totalGames}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" sx={{ color: '#8899a6' }}>
-              Following
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {userStats.following}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography variant="body2" sx={{ color: '#8899a6' }}>
-              Followers
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {userStats.followers}
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
+      )}
 
       {/* Review Dialog */}
       <ReviewDialog 
@@ -964,6 +1126,26 @@ const ProfilePage = () => {
           window.location.reload();
         }}
       />
+
+      {/* Floating Action Button for Mobile */}
+      {isMobile && (
+        <Fab
+          color="primary"
+          onClick={() => setOpenReviewDialog(true)}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            backgroundColor: '#1da1f2',
+            '&:hover': {
+              backgroundColor: '#1a91da'
+            },
+            zIndex: 1000
+          }}
+        >
+          <FontAwesomeIcon icon={faPencilAlt} />
+        </Fab>
+      )}
     </Box>
   );
 };

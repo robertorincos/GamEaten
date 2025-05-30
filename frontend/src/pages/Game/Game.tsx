@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { 
   Box, 
   Typography, 
@@ -16,7 +16,15 @@ import {
   Tab,
   Chip,
   Button,
-  TextField
+  TextField,
+  useMediaQuery,
+  useTheme,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Menu,
+  MenuItem,
+  Fab
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -31,18 +39,18 @@ import {
   faGamepad,
   faUser,
   faSpinner,
-  faComment,
-  faHeart,
-  faShare,
   faStar,
   faCalendarAlt,
   faDesktop,
   faBookmark,
   faPencilAlt,
+  faBars,
+  faEllipsisV,
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
 import { getGameDetails, searchGame, searchGameSuggestions, createReview, getReviews } from '../../api/funcs';
 import ReviewDialog from '../../contexts/components/Review/review';
+import PostCard from '../../contexts/components/PostCard/PostCard';
 
 // Game interface based on API response
 interface Platform {
@@ -84,11 +92,16 @@ interface Comment {
   id: number;
   id_game: number;
   username: string;
-  comment: string;
+  review_text: string;
   date_created: string;
   gif_url?: string;
   has_text: boolean;
   has_gif: boolean;
+  comment_count?: number;
+  likes_count?: number;
+  user_has_liked?: boolean;
+  reposts_count?: number;
+  user_has_reposted?: boolean;
 }
 
 //interface CommentsResponse {
@@ -103,7 +116,10 @@ interface Comment {
 
 const Game = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
+  
   const [gameDetails, setGameDetails] = useState<GameDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -116,6 +132,10 @@ const Game = () => {
   const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   
+  // Mobile-specific state
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
+
   // Review dialog state
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
 
@@ -331,6 +351,7 @@ const Game = () => {
   return (
     <Box sx={{ 
       display: 'flex', 
+      flexDirection: isMobile ? 'column' : 'row',
       justifyContent: 'center',
       minHeight: '100vh', 
       width: '100%',
@@ -338,125 +359,265 @@ const Game = () => {
       padding: 0,
       backgroundColor: '#0e1621'
     }}>
-      {/* Left Column - Navigation */}
-      <Box 
-        sx={{ 
-          width: '220px', 
-          borderRight: '1px solid #1e2c3c', 
-          padding: '20px',
-          height: '100vh',
-          position: 'sticky',
-          top: 0,
-          overflowY: 'auto'
+      {/* Mobile Header */}
+      {isMobile && (
+        <AppBar 
+          position="sticky" 
+          sx={{ 
+            backgroundColor: '#0e1621', 
+            borderBottom: '1px solid #1e2c3c',
+            boxShadow: 'none'
+          }}
+        >
+          <Toolbar sx={{ justifyContent: 'space-between', minHeight: '56px !important' }}>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setMobileDrawerOpen(true)}
+              sx={{ p: 1 }}
+            >
+              <FontAwesomeIcon icon={faBars} />
+            </IconButton>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '8px' }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                GamEaten
+              </Typography>
+            </Box>
+            
+            <IconButton 
+              color="inherit" 
+              onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+              sx={{ p: 1 }}
+            >
+              <FontAwesomeIcon icon={faEllipsisV} />
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+      )}
+
+      {/* Mobile Navigation Drawer */}
+      <Drawer
+        anchor="left"
+        open={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: 280,
+            backgroundColor: '#0e1621',
+            color: 'white',
+            borderRight: '1px solid #1e2c3c'
+          }
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
-          <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '10px' }} />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>GamEaten</Typography>
+        <Box sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+            <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '10px' }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>GamEaten</Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box 
+              onClick={() => { window.location.href = '/home'; setMobileDrawerOpen(false); }}
+              sx={{ 
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
+              }}
+            >
+              <FontAwesomeIcon icon={faHome} style={{ marginRight: '15px' }} />
+              Home
+            </Box>
+            <Box 
+              onClick={() => { window.location.href = '/profile'; setMobileDrawerOpen(false); }}
+              sx={{ 
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                '&:hover': { backgroundColor: 'rgba(29, 161, 242, 0.1)' }
+              }}
+            >
+              <FontAwesomeIcon icon={faUser} style={{ marginRight: '15px' }} />
+              Profile
+            </Box>
+          </Box>
+          
+          <Button 
+            variant="contained" 
+            fullWidth 
+            onClick={() => {
+              handleOpenReviewDialog();
+              setMobileDrawerOpen(false);
+            }}
+            sx={{
+              mt: 3,
+              py: 1.5,
+              borderRadius: '30px',
+              backgroundColor: '#1da1f2',
+              fontWeight: 'bold',
+              textTransform: 'none',
+              fontSize: '16px',
+              '&:hover': {
+                backgroundColor: '#1a91da'
+              }
+            }}
+          >
+            <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+            Review Game
+          </Button>
         </Box>
-        
+      </Drawer>
+
+      {/* User Menu for Mobile */}
+      <Menu
+        anchorEl={userMenuAnchor}
+        open={Boolean(userMenuAnchor)}
+        onClose={() => setUserMenuAnchor(null)}
+        sx={{
+          '& .MuiPaper-root': {
+            backgroundColor: '#172331',
+            color: 'white',
+            border: '1px solid #1e2c3c'
+          }
+        }}
+      >
+        <MenuItem onClick={() => { window.location.href = '/profile'; setUserMenuAnchor(null); }}>
+          <FontAwesomeIcon icon={faUser} style={{ marginRight: '10px' }} />
+          Profile
+        </MenuItem>
+        <MenuItem onClick={() => { logout(); window.location.href = '/'; }}>
+          <FontAwesomeIcon icon={faSignOutAlt} style={{ marginRight: '10px' }} />
+          Logout
+        </MenuItem>
+      </Menu>
+
+      {/* Left Column - Navigation (Desktop/Tablet only) */}
+      {!isMobile && (
         <Box 
           sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: 1,
-            '& .nav-item': {
-              padding: '12px 15px',
-              borderRadius: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              fontWeight: 500,
-              transition: 'all 0.2s',
-              '&:hover': {
-                backgroundColor: 'rgba(29, 161, 242, 0.1)'
-              },
-              '&.active': {
-                backgroundColor: '#1da1f2',
-                color: '#fff'
-              },
-              '& .icon': {
-                width: '20px',
-                marginRight: '15px',
-                textAlign: 'center'
+            width: isTablet ? '200px' : '220px', 
+            borderRight: '1px solid #1e2c3c', 
+            padding: isTablet ? '15px' : '20px',
+            height: '100vh',
+            position: 'sticky',
+            top: 0,
+            overflowY: 'auto'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+            <FontAwesomeIcon icon={faGamepad} style={{ marginRight: '10px' }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: isTablet ? '1.1rem' : '1.25rem' }}>
+              GamEaten
+            </Typography>
+          </Box>
+          
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 1,
+              '& .nav-item': {
+                padding: '12px 15px',
+                borderRadius: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                fontWeight: 500,
+                transition: 'all 0.2s',
+                '&:hover': {
+                  backgroundColor: 'rgba(29, 161, 242, 0.1)'
+                },
+                '&.active': {
+                  backgroundColor: '#1da1f2',
+                  color: '#fff'
+                },
+                '& .icon': {
+                  width: '20px',
+                  marginRight: '15px',
+                  textAlign: 'center'
+                }
               }
-            }
-          }}
-        >
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/home'}
-            sx={{ cursor: 'pointer' }}
+            }}
           >
-            <span className="icon">
-              <FontAwesomeIcon icon={faHome} />
-            </span>
-            Home
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/home'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faHome} />
+              </span>
+              Home
+            </Box>
+            
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/global'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faGlobe} />
+              </span>
+              Global
+            </Box>
+            
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/news'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faNewspaper} />
+              </span>
+              Game News
+            </Box>
+            
+            <Box 
+              className="nav-item"
+              onClick={() => window.location.href = '/profile'}
+              sx={{ cursor: 'pointer' }}
+            >
+              <span className="icon">
+                <FontAwesomeIcon icon={faUser} />
+              </span>
+              Profile
+            </Box>
           </Box>
           
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/global'}
-            sx={{ cursor: 'pointer' }}
+          {/* Review Button - Similar to Twitter's Tweet button */}
+          <Button 
+            variant="contained" 
+            fullWidth 
+            onClick={handleOpenReviewDialog}
+            sx={{
+              mt: 3,
+              mb: 3,
+              py: 1.5,
+              borderRadius: '30px',
+              backgroundColor: '#1da1f2',
+              fontWeight: 'bold',
+              textTransform: 'none',
+              fontSize: '16px',
+              '&:hover': {
+                backgroundColor: '#1a91da'
+              }
+            }}
           >
-            <span className="icon">
-              <FontAwesomeIcon icon={faGlobe} />
-            </span>
-            Global
-          </Box>
-          
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/news'}
-            sx={{ cursor: 'pointer' }}
-          >
-            <span className="icon">
-              <FontAwesomeIcon icon={faNewspaper} />
-            </span>
-            Game News
-          </Box>
-          
-          <Box 
-            className="nav-item"
-            onClick={() => window.location.href = '/profile'}
-            sx={{ cursor: 'pointer' }}
-          >
-            <span className="icon">
-              <FontAwesomeIcon icon={faUser} />
-            </span>
-            Profile
-          </Box>
+            <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
+            Review Game
+          </Button>
         </Box>
-        
-        {/* Review Button - Similar to Twitter's Tweet button */}
-        <Button 
-          variant="contained" 
-          fullWidth 
-          onClick={handleOpenReviewDialog}
-          sx={{
-            mt: 3,
-            mb: 3,
-            py: 1.5,
-            borderRadius: '30px',
-            backgroundColor: '#1da1f2',
-            fontWeight: 'bold',
-            textTransform: 'none',
-            fontSize: '16px',
-            '&:hover': {
-              backgroundColor: '#1a91da'
-            }
-          }}
-        >
-          <FontAwesomeIcon icon={faPencilAlt} style={{ marginRight: '10px' }} />
-          Review Game
-        </Button>
-      </Box>
+      )}
 
       {/* Middle Column - Game Content */}
       <Box 
         sx={{ 
-          width: '600px',
-          borderRight: '1px solid #1e2c3c',
-          minHeight: '100vh'
+          width: isMobile ? '100%' : isTablet ? '500px' : '600px',
+          borderRight: !isMobile && !isTablet ? '1px solid #1e2c3c' : 'none',
+          minHeight: isMobile ? 'auto' : '100vh',
+          overflowY: isMobile ? 'visible' : 'auto'
         }}
       >
         {loading ? (
@@ -470,7 +631,7 @@ const Game = () => {
               {/* Banner Image */}
               <Box sx={{ 
                 width: '100%', 
-                height: '200px', 
+                height: isMobile ? '150px' : '200px', 
                 position: 'relative', 
                 overflow: 'hidden',
                 backgroundColor: '#172331' 
@@ -496,13 +657,13 @@ const Game = () => {
               <Box 
                 sx={{ 
                   position: 'absolute', 
-                  bottom: '-50px', 
-                  left: '20px',
+                  bottom: isMobile ? '-40px' : '-50px', 
+                  left: isMobile ? '16px' : '20px',
                   border: '4px solid #0e1621',
-                  borderRadius: '16px',
+                  borderRadius: isMobile ? '12px' : '16px',
                   overflow: 'hidden',
-                  width: '120px',
-                  height: '120px',
+                  width: isMobile ? '80px' : '120px',
+                  height: isMobile ? '80px' : '120px',
                   backgroundColor: '#172331'
                 }}
               >
@@ -531,33 +692,51 @@ const Game = () => {
               <Box 
                 sx={{ 
                   position: 'absolute', 
-                  bottom: '-40px', 
-                  right: '20px',
+                  bottom: isMobile ? '-30px' : '-40px', 
+                  right: isMobile ? '16px' : '20px',
                   display: 'flex',
-                  gap: 2
+                  gap: isMobile ? 1 : 2
                 }}
               >
                 <Button 
                   variant="contained" 
                   color="primary"
                   startIcon={<FontAwesomeIcon icon={faBookmark} />}
-                  sx={{ borderRadius: '30px', textTransform: 'none' }}
+                  sx={{ 
+                    borderRadius: '30px', 
+                    textTransform: 'none',
+                    fontSize: isMobile ? '12px' : '14px',
+                    px: isMobile ? 2 : 3
+                  }}
                 >
-                  Save Game
+                  {isMobile ? 'Save' : 'Save Game'}
                 </Button>
               </Box>
             </Box>
 
             {/* Game Info */}
-            <Box sx={{ pt: 7, px: 3, pb: 2 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            <Box sx={{ 
+              pt: isMobile ? 5 : 7, 
+              px: isMobile ? 2 : 3, 
+              pb: 2 
+            }}>
+              <Typography 
+                variant={isMobile ? 'h6' : 'h5'} 
+                sx={{ 
+                  fontWeight: 700,
+                  fontSize: isMobile ? '1.25rem' : '1.5rem'
+                }}
+              >
                 {gameDetails.name}
               </Typography>
 
               {gameDetails.rating && (
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                   <FontAwesomeIcon icon={faStar} style={{ color: '#FFD700', marginRight: '8px' }} />
-                  <Typography variant="subtitle1">
+                  <Typography 
+                    variant="subtitle1"
+                    sx={{ fontSize: isMobile ? '14px' : '16px' }}
+                  >
                     {Math.round(gameDetails.rating * 10) / 10}
                   </Typography>
                 </Box>
@@ -661,84 +840,39 @@ const Game = () => {
                 {/* Comments List */}
                 {commentLoading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                    <CircularProgress />
+                    <CircularProgress sx={{ color: '#1da1f2' }} />
                   </Box>
                 ) : comments.length > 0 ? (
-                  comments.map((comment) => (
-                    <Box key={comment.id} sx={{ mb: 3, pb: 3, borderBottom: '1px solid #1e2c3c' }}>
-                      <Box sx={{ display: 'flex', gap: 2 }}>
-                        <Avatar sx={{ width: 48, height: 48 }}>
-                          {comment.username?.toString().charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box sx={{ flexGrow: 1 }}>                          
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography 
-                              variant="subtitle1" 
-                              sx={{ 
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                '&:hover': { textDecoration: 'underline' }
-                              }}
-                              onClick={() => navigate(`/user/${comment.username}`)}
-                            >
-                              User {comment.username}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#8899a6' }}>
-                              {new Date(comment.date_created).toLocaleDateString()}
-                            </Typography>                          </Box>
-                          {/* Display comment text if available */}
-                          {comment.comment && (
-                            <Typography variant="body1" sx={{ mt: 1, mb: comment.gif_url ? 2 : 1 }}>
-                              {comment.comment}
-                            </Typography>
-                          )}
-                          
-                          {/* Display GIF if available */}
-                          {comment.gif_url && (
-                            <Box 
-                              sx={{ 
-                                mt: 1, 
-                                mb: 1,
-                                display: 'flex',
-                                justifyContent: 'center',
-                                backgroundColor: '#1e2c3c',
-                                borderRadius: '12px',
-                                p: 1,
-                                cursor: 'pointer'
-                              }}
-                              onClick={() => {/* GIF click handler - maybe zoom in */}}
-                            >
-                              <img
-                                src={comment.gif_url}
-                                alt="Comment GIF"
-                                style={{
-                                  maxWidth: '100%',
-                                  maxHeight: '200px',
-                                  borderRadius: '8px',
-                                  objectFit: 'contain'
-                                }}
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                            </Box>
-                          )}
-                          
-                          <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
-                            <IconButton size="small" sx={{ color: '#8899a6' }}>
-                              <FontAwesomeIcon icon={faComment} />
-                            </IconButton>
-                            <IconButton size="small" sx={{ color: '#8899a6' }}>
-                              <FontAwesomeIcon icon={faHeart} />
-                            </IconButton>
-                            <IconButton size="small" sx={{ color: '#8899a6' }}>
-                              <FontAwesomeIcon icon={faShare} />
-                            </IconButton>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Box>
-                  ))
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {comments.map((comment) => {
+                      // Determine review type based on content
+                      let reviewType: 'text' | 'gif' | 'mixed' = 'text';
+                      if (comment.has_text && comment.has_gif) {
+                        reviewType = 'mixed';
+                      } else if (comment.has_gif) {
+                        reviewType = 'gif';
+                      }
+
+                      return (
+                        <PostCard 
+                          key={comment.id}
+                          id={comment.id}
+                          username={comment.username}
+                          text={comment.review_text}
+                          date={comment.date_created}
+                          gameId={comment.id_game}
+                          gameName={gameDetails?.name || 'Loading...'}
+                          gifUrl={comment.gif_url}
+                          commentType={reviewType}
+                          commentCount={comment.comment_count || 0}
+                          likesCount={comment.likes_count || 0}
+                          userHasLiked={comment.user_has_liked || false}
+                          repostsCount={comment.reposts_count || 0}
+                          userHasReposted={comment.user_has_reposted || false}
+                        />
+                      );
+                    })}
+                  </Box>
                 ) : (
                   <Box sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant="body1" sx={{ color: '#8899a6' }}>
@@ -1056,6 +1190,26 @@ const Game = () => {
           }
         }}
       />
+
+      {/* Floating Action Button for Mobile */}
+      {isMobile && (
+        <Fab
+          color="primary"
+          onClick={handleOpenReviewDialog}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            backgroundColor: '#1da1f2',
+            '&:hover': {
+              backgroundColor: '#1a91da'
+            },
+            zIndex: 1000
+          }}
+        >
+          <FontAwesomeIcon icon={faPencilAlt} />
+        </Fab>
+      )}
     </Box>
   );
 };

@@ -11,7 +11,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
+import { useMediaQuery } from '@mui/material';
 import ForgotPassword from '../ForgotPass/ForgotPassword';
 import { GoogleIcon, FacebookIcon, SitemarkIcon } from '../CustomIcons/CustomIcons';
 import { login } from '../../../api/auth';
@@ -24,10 +25,15 @@ const Card = styled(MuiCard)(({ theme }) => ({
   width: '100%',
   padding: theme.spacing(4),
   gap: theme.spacing(2),
+  margin: theme.spacing(1),
   boxShadow:
     'hsla(220, 30%, 5%, 0.05) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.05) 0px 15px 35px -5px',
   [theme.breakpoints.up('sm')]: {
     width: '450px',
+    margin: 0,
+  },
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(3),
   },
   ...theme.applyStyles('dark', {
     boxShadow:
@@ -37,6 +43,9 @@ const Card = styled(MuiCard)(({ theme }) => ({
 
 export default function SignInCard() {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [emailError, setEmailError] = useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -198,6 +207,10 @@ export default function SignInCard() {
           fullWidth 
           variant="contained" 
           disabled={isLoading}
+          sx={{
+            minHeight: isMobile ? '48px' : '40px',
+            fontSize: isMobile ? '16px' : '14px'
+          }}
         >
           {isLoading ? 'Signing in...' : 'Sign in'}
         </Button>
@@ -208,7 +221,14 @@ export default function SignInCard() {
               component={RouterLink} // Use Router Link instead of native anchor
               to="/signup"
               variant="body2"
-              sx={{ alignSelf: 'center', cursor: 'pointer' }}
+              sx={{ 
+                alignSelf: 'center', 
+                cursor: 'pointer',
+                fontSize: isMobile ? '16px' : '14px',
+                minHeight: isMobile ? '44px' : 'auto',
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
             >
               Sign up
             </Link>
@@ -222,6 +242,10 @@ export default function SignInCard() {
           variant="outlined"
           onClick={() => alert('Sign in with Google')}
           startIcon={<GoogleIcon />}
+          sx={{
+            minHeight: isMobile ? '48px' : '40px',
+            fontSize: isMobile ? '16px' : '14px'
+          }}
         >
           Sign in with Google
         </Button>
@@ -230,6 +254,10 @@ export default function SignInCard() {
           variant="outlined"
           onClick={() => alert('Sign in with Facebook')}
           startIcon={<FacebookIcon />}
+          sx={{
+            minHeight: isMobile ? '48px' : '40px',
+            fontSize: isMobile ? '16px' : '14px'
+          }}
         >
           Sign in with Facebook
         </Button>
