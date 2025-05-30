@@ -58,13 +58,24 @@ class Reviews(db.Model):
     def __repr__(self):
         return f'<Review {self.id}>'
 
-    def to_dict(self):
+    def to_dict(self, current_user_id=None):
         # Get the actual username from the User model
         user = User.query.filter_by(id=self.username).first()
         display_username = user.username if user else f"User {self.username}"
         
         # Get comment count for this review
         comment_count = Comments.query.filter_by(review_id=self.id).count()
+        
+        # Get likes count for this review
+        likes_count = Likes.query.filter_by(review_id=self.id).count()
+        
+        # Check if current user has liked this review
+        user_has_liked = False
+        if current_user_id:
+            user_has_liked = Likes.query.filter_by(
+                review_id=self.id, 
+                user_id=current_user_id
+            ).first() is not None
         
         return {
             "id": self.id, 
@@ -76,8 +87,23 @@ class Reviews(db.Model):
             "has_text": bool(self.review_text and self.review_text.strip()),
             "has_gif": bool(self.gif_url),
             "date_created": self.date_created.strftime('%Y-%m-%d %H:%M:%S'),
-            "comment_count": comment_count
+            "comment_count": comment_count,
+            "likes_count": likes_count,
+            "user_has_liked": user_has_liked
         }
+
+# Likes table - for review likes
+class Likes(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    review_id = db.Column(db.Integer, db.ForeignKey('reviews.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Ensure a user can't like the same review twice
+    __table_args__ = (db.UniqueConstraint('user_id', 'review_id', name='unique_like'),)
+    
+    def __repr__(self):
+        return f'<Like {self.user_id} -> Review {self.review_id}>'
 
 # Comments table - actual comments on reviews
 class Comments(db.Model):
@@ -567,7 +593,7 @@ def create_review():
         # Return the created review data
         return jsonify({
             'status': 'review created',
-            'review': new_review.to_dict()
+            'review': new_review.to_dict(current_user_id=user_id)
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -786,7 +812,7 @@ def ver():
     if busca == "game":
         total_reviews = Reviews.query.filter_by(id_game=id_game).count()
         reviews = Reviews.query.filter_by(id_game=id_game).order_by(Reviews.date_created.desc()).offset(offset).limit(size).all()
-        review_dicts = [review.to_dict() for review in reviews]
+        review_dicts = [review.to_dict(current_user_id=request.token_data['user']) for review in reviews]
         result = {
             "comments": review_dicts,  # Keep 'comments' key for backward compatibility
             "pagination": {
@@ -802,7 +828,7 @@ def ver():
         reviews = Reviews.query.filter_by(username=user_id).order_by(
             Reviews.date_created.desc()
         ).offset(offset).limit(size).all()
-        review_dicts = [review.to_dict() for review in reviews]
+        review_dicts = [review.to_dict(current_user_id=request.token_data['user']) for review in reviews]
         result = {
             "comments": review_dicts,  # Keep 'comments' key for backward compatibility
             "pagination": {
@@ -824,7 +850,7 @@ def ver():
             reviews = Reviews.query.order_by(
                 Reviews.date_created.desc()
             ).offset(offset).limit(size).all()
-        review_dicts = [review.to_dict() for review in reviews]
+        review_dicts = [review.to_dict(current_user_id=request.token_data['user']) for review in reviews]
         result = {
             "comments": review_dicts,  # Keep 'comments' key for backward compatibility
             "pagination": {
@@ -834,7 +860,7 @@ def ver():
                 "per_page": size
             }
         }
-        return jsonify(result), 200    
+        return jsonify(result), 200
     else:
         return jsonify({"status": "invalid request"}), 400
 
@@ -1139,6 +1165,58 @@ def gif_categories():
     except Exception as e:
         print(f"Error getting categories: {str(e)}")
         return jsonify({"status": "An error occurred"}), 500
+
+
+# Like/Unlike functionality for reviews
+@app.route('/api/review/<int:review_id>/like', methods=['POST'])
+@token_required
+def like_unlike_review(review_id):
+    """
+    Like or unlike a review. If the user has already liked the review, 
+    it will be unliked. If not liked, it will be liked.
+    """
+    try:
+        user_id = request.token_data['user']
+        
+        # Validate that the review exists
+        review = Reviews.query.get(review_id)
+        if not review:
+            return jsonify({"status": "Review not found"}), 404
+        
+        # Check if user has already liked this review
+        existing_like = Likes.query.filter_by(user_id=user_id, review_id=review_id).first()
+        
+        if existing_like:
+            # Unlike - remove the like
+            db.session.delete(existing_like)
+            db.session.commit()
+            
+            # Get updated like count
+            like_count = Likes.query.filter_by(review_id=review_id).count()
+            
+            return jsonify({
+                "status": "unliked",
+                "liked": False,
+                "like_count": like_count
+            }), 200
+        else:
+            # Like - add a new like
+            new_like = Likes(user_id=user_id, review_id=review_id)
+            db.session.add(new_like)
+            db.session.commit()
+            
+            # Get updated like count
+            like_count = Likes.query.filter_by(review_id=review_id).count()
+            
+            return jsonify({
+                "status": "liked",
+                "liked": True,
+                "like_count": like_count
+            }), 200
+            
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": f"Error processing like: {str(e)}"}), 500
 
 
 # Create all tables

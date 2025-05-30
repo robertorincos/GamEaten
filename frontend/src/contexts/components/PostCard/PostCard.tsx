@@ -4,7 +4,7 @@ import { faHeart, faComment, faShare, faEllipsisH, faGamepad, faReply } from '@f
 import { useState } from 'react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { getReviewComments, createComment } from '../../../api/funcs';
+import { getReviewComments, createComment, likeUnlikeReview } from '../../../api/funcs';
 
 interface Comment {
   comment_id: number;
@@ -26,6 +26,8 @@ interface PostCardProps {
   gifUrl?: string;
   commentType?: 'text' | 'gif' | 'mixed';
   commentCount?: number;
+  likesCount?: number;
+  userHasLiked?: boolean;
   isHighlighted?: boolean;
   onReviewClick?: () => void;
 }
@@ -38,13 +40,15 @@ const PostCard = ({
   gameId, 
   gameName, 
   gifUrl, 
-  commentCount = 0, 
+  commentCount = 0,
+  likesCount = 0,
+  userHasLiked = false,
   isHighlighted = false,
   onReviewClick 
 }: PostCardProps) => {
   const navigate = useNavigate();
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(Math.floor(Math.random() * 50)); // Random placeholder
+  const [liked, setLiked] = useState(userHasLiked);
+  const [likeCount, setLikeCount] = useState(likesCount);
   const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -109,14 +113,18 @@ const PostCard = ({
       setShowComments(false);
     }
   };
-
-  const handleLike = () => {
-    if (liked) {
-      setLikeCount(prev => prev - 1);
-    } else {
-      setLikeCount(prev => prev + 1);
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const response = await likeUnlikeReview(id);
+      setLiked(response.liked);
+      setLikeCount(response.like_count);
+    } catch (error) {
+      console.error('Failed to like/unlike review:', error);
+      // Revert optimistic update on error
+      setLiked(!liked);
+      setLikeCount(liked ? likeCount + 1 : likeCount - 1);
     }
-    setLiked(!liked);
   };
 
   const handleGoToGame = () => {
@@ -333,7 +341,7 @@ const PostCard = ({
                 '&:hover': { color: '#f91880' },
                 cursor: 'pointer'
               }}
-              onClick={(e) => { e.stopPropagation(); handleLike(); }}
+              onClick={handleLike}
             >
               <FontAwesomeIcon icon={faHeart} />
               <Typography variant="body2" fontSize="13px" sx={{ ml: 1 }}>{likeCount}</Typography>

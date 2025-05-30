@@ -50,6 +50,8 @@ interface Comment {
   gif_url?: string;
   has_text: boolean;
   has_gif: boolean;
+  likes_count?: number;
+  user_has_liked?: boolean;
 }
 
 interface UserStats {
@@ -738,6 +740,8 @@ const ProfilePage = () => {
                         gameName={gameNames[comment.id_game] || 'Loading...'}
                         gifUrl={comment.gif_url}
                         commentType={commentType}
+                        likesCount={comment.likes_count || 0}
+                        userHasLiked={comment.user_has_liked || false}
                       />
                     );
                   })

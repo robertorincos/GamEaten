@@ -19,6 +19,8 @@ interface Review {
   has_gif: boolean;
   comment_type?: 'text' | 'gif' | 'mixed';
   comment_count?: number;
+  likes_count?: number;
+  user_has_liked?: boolean;
 }
 
 interface GameInfo {
@@ -165,6 +167,8 @@ const GameFeed = ({ refresh }: GameFeedProps) => {
             gifUrl={review.gif_url}
             commentType={reviewType}
             commentCount={review.comment_count || 0}
+            likesCount={review.likes_count || 0}
+            userHasLiked={review.user_has_liked || false}
             isHighlighted={highlightedReview === review.id}
             onReviewClick={() => handleReviewClick(review.id)}
           />

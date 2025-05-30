@@ -457,3 +457,20 @@ export const getUserFollowing = async (
         throw error;
     }
 };
+
+/**
+ * Like or unlike a review
+ */
+export const likeUnlikeReview = async (reviewId: number): Promise<{
+    status: string;
+    liked: boolean;
+    like_count: number;
+}> => {
+    try {
+        const response = await axiosInstance.post(`/api/review/${reviewId}/like`);
+        return response.data;
+    } catch (error) {
+        console.error('API Error - likeUnlikeReview:', error);
+        throw error;
+    }
+};
