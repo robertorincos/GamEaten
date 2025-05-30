@@ -1278,7 +1278,7 @@ def suggestions():
         t = check_token()
         token = t.json()['access_token']
         headers = {'Client-ID': f'{os.getenv("IGDB_CLIENT")}', 'Authorization':f'Bearer {token}'}
-        body = f'fields id,name; limit 5; search "{sanitized_name}";'
+        body = f'fields id,name,cover.url; limit 5; search "{sanitized_name}";'
         response = requests.post('https://api.igdb.com/v4/games/', headers=headers, data=body)
         result = response.json()
         
@@ -1286,9 +1286,16 @@ def suggestions():
         suggestions = []
         for game in result[:5]:  # Limit to 5 results
             if 'id' in game and 'name' in game:
+                cover_url = None
+                if 'cover' in game and 'url' in game['cover']:
+                    cover_url = game['cover']['url'].replace('t_thumb', 't_cover_big')
+                    if not cover_url.startswith('http'):
+                        cover_url = f"https:{cover_url}"
+                
                 suggestions.append({
                     'id': game['id'],
-                    'name': game['name']
+                    'name': game['name'],
+                    'cover_url': cover_url
                 })
         
         return jsonify(suggestions), 200
@@ -2510,6 +2517,47 @@ def delete_review(review_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": f"Error deleting review: {str(e)}"}), 500
+
+@app.route('/api/search/users', methods=['POST'])
+def search_users():
+    """Search for users by username"""
+    try:
+        if not request.is_json:
+            return jsonify({"status": "Request must be JSON"}), 400
+        
+        if 'query' not in request.json or not request.json['query']:
+            return jsonify({"status": "Search query is required"}), 400
+        
+        query = request.json['query'].strip()
+        
+        if len(query) < 2:
+            return jsonify({"status": "Query must be at least 2 characters"}), 400
+        
+        if len(query) > 50:
+            return jsonify({"status": "Query too long"}), 400
+        
+        # Search for users with username containing the query (case-insensitive)
+        users = User.query.filter(
+            User.username.ilike(f'%{query}%')
+        ).limit(10).all()  # Limit to 10 results
+        
+        if not users:
+            return jsonify({"users": []}), 200
+        
+        # Format results
+        user_results = []
+        for user in users:
+            user_data = {
+                'id': user.id,
+                'username': user.username,
+                'profile_photo': f'/api/profile/photo/{user.profile_photo}' if user.profile_photo else None
+            }
+            user_results.append(user_data)
+        
+        return jsonify({"users": user_results}), 200
+        
+    except Exception as e:
+        return jsonify({"status": f"An error occurred: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=False)

@@ -43,7 +43,7 @@ import {
   faRefresh
 } from '@fortawesome/free-solid-svg-icons';
 import { getCurrentUser, isAuthenticated, logout } from '../../api/auth';
-import { searchGame, searchGameSuggestions, getMostReviewedGamesWeek } from '../../api/funcs';
+import { searchGame, searchGameSuggestions, searchUsers, getMostReviewedGamesWeek } from '../../api/funcs';
 import ReviewDialog from '../../contexts/components/Review/review';
 import PostCard from '../../contexts/components/PostCard/PostCard';
 
@@ -60,7 +60,7 @@ const MostReviewedGames = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<Array<{id: number, name: string}>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{id: number, name?: string, username?: string, type: 'game' | 'user', profile_photo?: string, cover_url?: string}>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   
   // Mobile-specific state
@@ -134,10 +134,24 @@ const MostReviewedGames = () => {
     
     try {
       setSearchLoading(true);
-      const gameId = await searchGame({ query: searchQuery });
       
-      if (gameId) {
-        navigate(`/game/${gameId}`);
+      // Check if it's a user search (starts with @)
+      if (searchQuery.startsWith('@')) {
+        const usernameQuery = searchQuery.slice(1).trim(); // Remove @ prefix
+        if (usernameQuery) {
+          const users = await searchUsers({ query: usernameQuery });
+          if (users.length > 0) {
+            // Navigate to the first user's profile
+            navigate(`/profile/${users[0].username}`);
+          }
+        }
+      } else {
+        // Regular game search
+        const gameId = await searchGame({ query: searchQuery });
+        
+        if (gameId) {
+          navigate(`/game/${gameId}`);
+        }
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -153,9 +167,35 @@ const MostReviewedGames = () => {
     if (query.trim().length >= 2) {
       setSearchLoading(true);
       try {
-        const results = await searchGameSuggestions({ query });
-        setSuggestions(results);
-        setShowSuggestions(true);
+        // Check if it's a user search (starts with @)
+        if (query.startsWith('@')) {
+          const usernameQuery = query.slice(1).trim(); // Remove @ prefix
+          if (usernameQuery.length >= 1) {
+            const users = await searchUsers({ query: usernameQuery });
+            const userSuggestions = users.map(user => ({
+              id: user.id,
+              username: user.username,
+              type: 'user' as const,
+              profile_photo: user.profile_photo
+            }));
+            setSuggestions(userSuggestions);
+            setShowSuggestions(true);
+          } else {
+            setSuggestions([]);
+            setShowSuggestions(false);
+          }
+        } else {
+          // Regular game search
+          const results = await searchGameSuggestions({ query });
+          const gameSuggestions = results.map(game => ({
+            id: game.id,
+            name: game.name,
+            type: 'game' as const,
+            cover_url: game.cover_url
+          }));
+          setSuggestions(gameSuggestions);
+          setShowSuggestions(true);
+        }
       } catch (error) {
         console.error('Error fetching suggestions:', error);
       } finally {
@@ -167,9 +207,13 @@ const MostReviewedGames = () => {
     }
   };
 
-  const handleSelectSuggestion = (gameId: number) => {
+  const handleSelectSuggestion = (suggestion: {id: number, name?: string, username?: string, type: 'game' | 'user'}) => {
     setShowSuggestions(false);
-    navigate(`/game/${gameId}`);
+    if (suggestion.type === 'game') {
+      navigate(`/game/${suggestion.id}`);
+    } else {
+      navigate(`/profile/${suggestion.username}`);
+    }
   };
 
   const handleClickOutside = () => {
@@ -720,7 +764,7 @@ const MostReviewedGames = () => {
               </IconButton>
               <InputBase
                 sx={{ ml: 1, flex: 1, color: 'white' }}
-                placeholder="Search GamEaten"
+                placeholder={searchQuery.startsWith('@') ? "Search users..." : "Search games or @users"}
                 inputProps={{ 'aria-label': 'search' }}
                 value={searchQuery}
                 onChange={handleSearchInputChange}
@@ -744,22 +788,56 @@ const MostReviewedGames = () => {
                 }}
               >
                 <List>
-                  {suggestions.map((game) => (
+                  {suggestions.map((suggestion) => (
                     <ListItem 
-                      key={game.id} 
-                      onClick={() => handleSelectSuggestion(game.id)}
+                      key={suggestion.id} 
+                      onClick={() => handleSelectSuggestion(suggestion)}
                       sx={{ 
                         '&:hover': { 
                           backgroundColor: 'rgba(29, 161, 242, 0.1)'
                         },
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center'
                       }}
                     >
+                      <Box sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
+                        {suggestion.type === 'user' ? (
+                          suggestion.profile_photo ? (
+                            <Avatar 
+                              src={suggestion.profile_photo} 
+                              sx={{ width: 32, height: 32 }}
+                            />
+                          ) : (
+                            <Avatar sx={{ width: 32, height: 32, backgroundColor: '#1da1f2' }}>
+                              <FontAwesomeIcon icon={faUser} size="sm" />
+                            </Avatar>
+                          )
+                        ) : (
+                          suggestion.cover_url ? (
+                            <Avatar 
+                              src={suggestion.cover_url} 
+                              sx={{ width: 32, height: 32 }}
+                              variant="square"
+                            />
+                          ) : (
+                            <Avatar sx={{ width: 32, height: 32, backgroundColor: '#2e7d32' }}>
+                              <FontAwesomeIcon icon={faGamepad} size="sm" />
+                            </Avatar>
+                          )
+                        )}
+                      </Box>
                       <ListItemText 
-                        primary={game.name} 
-                        primaryTypographyProps={{ 
-                          sx: { color: 'white' }
-                        }} 
+                        primary={
+                          <Box>
+                            <Typography sx={{ color: 'white', fontWeight: 500 }}>
+                              {suggestion.type === 'user' ? `@${suggestion.username}` : suggestion.name}
+                            </Typography>
+                            <Typography sx={{ color: '#8899a6', fontSize: '12px' }}>
+                              {suggestion.type === 'user' ? 'User' : 'Game'}
+                            </Typography>
+                          </Box>
+                        }
                       />
                     </ListItem>
                   ))}

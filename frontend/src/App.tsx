@@ -75,6 +75,14 @@ function App() {
           } 
         />
         <Route 
+          path="/profile/:username" 
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/saved-games" 
           element={
             <ProtectedRoute>

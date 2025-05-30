@@ -123,6 +123,7 @@ export interface ReviewQueryParams {
 export interface GameSearchSuggestionsResponse {
   id: number;
   name: string;
+  cover_url?: string;
 }
 
 export interface UserProfileData {
@@ -291,6 +292,32 @@ export const searchGameSuggestions = async (searchQuery: GameSearchQuery): Promi
         }
     } catch (error) {
         console.error('Error getting game suggestions:', error);
+        return []; // Return empty array on error instead of throwing
+    }
+};
+
+/**
+ * Search for users by username
+ */
+export const searchUsers = async (searchQuery: { query: string }): Promise<{ id: number; username: string; profile_photo?: string; }[]> => {
+    try {
+        const query = searchQuery.query.trim();
+        
+        // Don't search empty or very short queries
+        if (!query || query.length < 2) {
+            return [];
+        }
+        
+        // Make API call to search users
+        const response = await axiosInstance.post('/api/search/users', { query });
+        
+        if (response.data && Array.isArray(response.data.users)) {
+            return response.data.users;
+        } else {
+            return [];
+        }
+    } catch (error) {
+        console.error('Error searching for users:', error);
         return []; // Return empty array on error instead of throwing
     }
 };
@@ -657,19 +684,6 @@ export const getReposts = async (page: number = 1, size: number = 20): Promise<{
         return response.data;
     } catch (error) {
         console.error('API Error - getReposts:', error);
-        throw error;
-    }
-};
-
-/**
- * Search for users with intelligent matching and context
- */
-export const searchUsers = async (searchQuery: UserSearchQuery): Promise<UserSearchResponse> => {
-    try {
-        const response = await axiosInstance.post('/api/search/users', searchQuery);
-        return response.data;
-    } catch (error) {
-        console.error('API Error - searchUsers:', error);
         throw error;
     }
 };
