@@ -122,7 +122,7 @@ class Reviews(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_game = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False, index=True)
     username = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    review_text = db.Column(db.String(255), unique=False, nullable=True)
+    review_text = db.Column(db.String(500), unique=False, nullable=True)
     gif_url = db.Column(db.String(500), unique=False, nullable=True)
     date_created = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
@@ -871,8 +871,8 @@ def create_review():
     # Validate text review if provided
     sanitized_review = None
     if review_text:
-        if len(review_text) > 255:
-            return jsonify({"status": "Review too long (max 255 characters)"}), 400
+        if len(review_text) > 500:
+            return jsonify({"status": "Review too long (max 500 characters)"}), 400
         sanitized_review = html.escape(review_text)
     
     # Validate GIF URL if provided
